@@ -12,18 +12,17 @@ The intent of this public repository is to share design intent, invite targeted 
 ---
 
 ## What this repo contains (right now)
-- A VB6 implementation of CPU discovery (GetCPUCoreCount and supporting functions).
-- A tiny example Main routine that prints discovered processor data (used for internal verification).
-- Documentation (this README) describing vision and status.
+- UserControl with a visual overview of all the cpu-cores and how busy they are.
+- A simple form, showing this usercontrol.
 
 ## Current status — implemented
 - Processor enumeration: physical core count, per-core logical kernels reported.
-- Sample console output for verification.
-- No stress-generation code, no GUI, no compiled binaries in the repo.
+- UserControl with a visual overview of all the cpu-cores and how busy they are.
+- A simple form, showing this usercontrol.
+- No stress-generation code implemented yet.
 
 ## Why publish at this stage?
-- Early feedback on the enumeration approach and cross-Windows compatibility can prevent architectural rework later.
-- Publishing source-only avoids distributing potentially risky binaries and lets reviewers inspect behavior.
+- Early feedback on the approach and cross-Windows compatibility can prevent architectural rework later.
 
 ## Vision
 - A compact, responsive CPU-stress application with a minimalistic GUI that exposes:
