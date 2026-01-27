@@ -27,15 +27,19 @@ Attribute VB_PredeclaredId = False
 Attribute VB_Exposed = False
 Option Explicit
 
-Private Const PROPNAME_AUTOUPDATE = "AutoUpdate"
+Private Const PROPNAME_AUTOUPDATE As String = "AutoUpdate"
+Private Const PROPNAME_UPDATEINTERVAL As String = "UpdateInterval"
+Private Const PROPNAME_AUTOSIZE As String = "AutoSize"
 
-Private Const CPUVIEW_TITLE = "CPU Overview"
+Private Const CPU_UPDATE_INTERVAL As Long = 1000
 
-Private Const KERNEL_PIXEL_WIDTH As Long = 25
-Private Const KERNEL_PIXEL_HEIGHT As Long = KERNEL_PIXEL_WIDTH
+Private Const CPUVIEW_TITLE As String = "CPU Overview"
+
+Private Const KERNEL_PIXEL_WIDTH As Long = 20
+Private Const KERNEL_PIXEL_HEIGHT As Long = 40
 Private Const KERNEL_PIXEL_SPACING As Long = 7
 
-Private Const PDH_FMT_DOUBLE = &H200
+Private Const PDH_FMT_DOUBLE As Long = &H200
 
 Private Type PDH_FMT_COUNTERVALUE
   CStatus As Long
@@ -50,6 +54,8 @@ Private Declare Function PdhGetFormattedCounterValue Lib "pdh.dll" (ByVal counte
 Private Declare Function PdhCloseQuery Lib "pdh.dll" (ByVal query As Long) As Long
     
 Dim m_AutoUpdate As Boolean
+Dim m_UpdateInterval As Long
+Dim m_AutoSize As Boolean
 
 Dim CPUInfo As CPU_Info
 Dim TotalCores As Long
@@ -62,12 +68,14 @@ Dim m_IsHovering As Boolean
 Dim m_HoverIndex As Long
 Dim m_IsPressed As Boolean
 Dim m_MouseIsDown As Boolean
+Dim m_PressedIndex As Long
 
 Dim FixedWindowSize As POINTAPI
 
 Dim gQuery As Long
 Dim gCounters() As Long
 Dim gHasData As Boolean
+Dim gOpen As Boolean
 
 Dim WithEvents UpdateTimer As CPUTimer
 Attribute UpdateTimer.VB_VarHelpID = -1
@@ -77,23 +85,37 @@ Public Event Click(Index As Long)
 Public Property Get AutoUpdate() As Boolean
   AutoUpdate = m_AutoUpdate
 End Property
+Public Property Get UpdateInterval() As Long
+  UpdateInterval = m_UpdateInterval
+End Property
+Public Property Get AutoSize() As Boolean
+  AutoSize = m_AutoSize
+End Property
 Public Property Let AutoUpdate(New_AutoUpdate As Boolean)
   If m_AutoUpdate = New_AutoUpdate Then Exit Property
   m_AutoUpdate = New_AutoUpdate
   ShiftAutoUpdate
 End Property
+Public Property Let UpdateInterval(New_UpdateInterval As Long)
+  If (m_UpdateInterval = New_UpdateInterval Or New_UpdateInterval = 0) Then Exit Property
+  m_UpdateInterval = New_UpdateInterval
+  If Not UpdateTimer Is Nothing Then UpdateTimer.Interval = m_UpdateInterval
+End Property
+Public Property Let AutoSize(New_AutoSize As Boolean)
+  If m_AutoSize = New_AutoSize Then Exit Property
+  m_AutoSize = New_AutoSize
+  If m_AutoSize = True Then UserControl_Resize
+End Property
 
 Public Sub Refresh(Optional FullRefresh As Boolean = False)
-  If FullRefresh = True Then
-    UserControl.Cls
-    DrawBorderAndTitle
-  End If
+  UserControl.Cls
+  DrawBorderAndTitle
   DrawCPURects
 End Sub
 
 Public Sub UpdateView()
-  GetCPULoads
   Dim i As Long
+  GetCPULoads
   For i = 0 To (TotalCores - 1)
     If CPULoad(i) <> oldCPULoad(i) Then
       DrawCPURect (i + 1), True
@@ -124,10 +146,10 @@ Private Sub DrawTitle()
   UserControl.Print CPUVIEW_TITLE
 End Sub
 
-Private Sub DrawCPURects()
+Private Sub DrawCPURects(Optional FullRedraw As Boolean = False)
   Dim i As Long
   For i = 1 To TotalCores
-    DrawCPURect i
+    DrawCPURect i, FullRedraw
   Next
 End Sub
 
@@ -157,46 +179,65 @@ Private Function GetCPUFloodHeight(CPUIndex As Long) As Long
 End Function
 
 Private Function GetCPUFloodColor(CPUIndex As Long) As Long
-  Dim r As Long
+  Dim cNorm As Boolean, cHov As Boolean, cClick As Boolean
+  If (m_MouseIsDown = True And m_IsPressed = True And m_PressedIndex = CPUIndex) Then
+    cClick = True
+  Else
+    If (m_IsHovering = True And m_HoverIndex = CPUIndex) Then
+      cHov = True
+    Else
+      cNorm = True
+    End If
+  End If
   Select Case CPULoad(CPUIndex - 1)
     Case Is >= 85
-      If m_HoverIndex = CPUIndex Then
-        If m_MouseIsDown Then r = COLOR_RED_PRESSED Else r = COLOR_RED_HOVER
+      If cClick = True Then
+        GetCPUFloodColor = COLOR_RED_PRESSED
+      ElseIf cHov = True Then
+        GetCPUFloodColor = COLOR_RED_HOVER
       Else
-        r = COLOR_RED
+        GetCPUFloodColor = COLOR_RED
       End If
     Case Is >= 60
-      If m_HoverIndex = CPUIndex Then
-        If m_MouseIsDown Then r = COLOR_YELLOW_PRESSED Else r = COLOR_YELLOW_HOVER
+      If cClick = True Then
+        GetCPUFloodColor = COLOR_YELLOW_PRESSED
+      ElseIf cHov = True Then
+        GetCPUFloodColor = COLOR_YELLOW_HOVER
       Else
-        r = COLOR_YELLOW
+        GetCPUFloodColor = COLOR_YELLOW
       End If
     Case Else
-      If m_HoverIndex = CPUIndex Then
-        If m_MouseIsDown Then r = COLOR_GREEN_PRESSED Else r = COLOR_GREEN_HOVER
+      If cClick = True Then
+        GetCPUFloodColor = COLOR_GREEN_PRESSED
+      ElseIf cHov = True Then
+        GetCPUFloodColor = COLOR_GREEN_HOVER
       Else
-        r = COLOR_GREEN
+        GetCPUFloodColor = COLOR_GREEN
       End If
   End Select
-  GetCPUFloodColor = r
 End Function
 
 Private Function GetCPUBackColor(CPUIndex As Long) As Long
-  If m_HoverIndex = CPUIndex Then
-    If m_MouseIsDown Then GetCPUBackColor = COLOR_BUTTON_PRESSED Else GetCPUBackColor = COLOR_BUTTON_HOVER
+  If (m_MouseIsDown = True And m_IsPressed = True And m_PressedIndex = CPUIndex) Then
+    GetCPUBackColor = COLOR_BUTTON_PRESSED
   Else
-    GetCPUBackColor = COLOR_BACKGROUND
+    If (m_IsHovering = True And m_HoverIndex = CPUIndex) Then
+      GetCPUBackColor = COLOR_BUTTON_HOVER
+    Else
+      GetCPUBackColor = COLOR_BACKGROUND
+    End If
   End If
 End Function
 
 Private Sub GetCPULoads()
   Dim i As Long, v As PDH_FMT_COUNTERVALUE
-  If gHasData = False Then
+  If gOpen = False Then
     ReDim gCounters(TotalCores - 1) As Long
     Call PdhOpenQuery(vbNullString, 0, gQuery)
     For i = 0 To (TotalCores - 1)
       Call PdhAddCounter(gQuery, "\Processor(" & CStr(i) & ")\% Processor Time", 0, gCounters(i))
     Next
+    gOpen = True
   End If
   Call PdhCollectQueryData(gQuery)
   If gHasData = False Then
@@ -222,6 +263,8 @@ Private Sub SetCPURECTs()
     cCols = tC
     cRows = tR
   Loop
+  tC = (cCols * cRows)
+  If tC < TotalCores Then cCols = (cCols + 1)
   Y = (Screen.TwipsPerPixelY * 23)
   w = (Screen.TwipsPerPixelX * KERNEL_PIXEL_WIDTH)
   h = (Screen.TwipsPerPixelX * KERNEL_PIXEL_HEIGHT)
@@ -229,7 +272,7 @@ Private Sub SetCPURECTs()
     X = (Screen.TwipsPerPixelX * 5)
     For j = 1 To cCols
       c = (c + 1)
-      If c > TotalCores Then Exit For
+      If c > TotalCores Then Exit Sub
       With cpuRECTs(c)
         .Left = X
         .Top = Y
@@ -277,12 +320,18 @@ Private Sub SetFixedWindowSize()
 End Sub
 
 Private Sub ShiftAutoUpdate()
-  If m_AutoUpdate = True Then StartUpdateTimer Else KillUpdateTimer
+  gHasData = False
+  If m_AutoUpdate = True Then
+    StartUpdateTimer
+  Else
+    KillUpdateTimer
+    DrawCPURects True
+  End If
 End Sub
 
 Private Sub StartUpdateTimer()
   Set UpdateTimer = New CPUTimer
-  UpdateTimer.Interval = 500
+  UpdateTimer.Interval = m_UpdateInterval
   UpdateTimer.Enabled = True
 End Sub
 
@@ -320,6 +369,7 @@ Private Sub StartHover(Optional DoNotRefresh As Boolean = False, Optional ForceR
     If DoNotRefresh = False Then r = True
   End If
   If ForceRefresh = True Then r = True
+  m_IsHovering = True
   If r = True Then
     DrawCPURect t, True
     DrawCPURect m_HoverIndex, True
@@ -359,11 +409,20 @@ Private Sub UserControl_Initialize()
   ShiftAutoUpdate
 End Sub
 
+Private Sub UserControl_InitProperties()
+  m_AutoUpdate = False
+  m_UpdateInterval = CPU_UPDATE_INTERVAL
+  m_AutoSize = True
+End Sub
+
 Private Sub UserControl_MouseDown(Button As Integer, Shift As Integer, X As Single, Y As Single)
   If Button = vbLeftButton Then
-    m_MouseIsDown = True
-    m_IsPressed = True
-    StartHover , True
+    If IsCursorOnWindow(UserControl.hWnd) Then
+      m_MouseIsDown = True
+      m_IsPressed = True
+      m_PressedIndex = GetCPUIndexFromMousePos()
+      StartHover , True
+    End If
   End If
 End Sub
 
@@ -379,10 +438,10 @@ Private Sub UserControl_MouseUp(Button As Integer, Shift As Integer, X As Single
     HadCapture = m_IsCapturing
     m_MouseIsDown = False
     m_IsPressed = False
-    DrawCPURect m_HoverIndex, True
+    DrawCPURect m_PressedIndex, True
     EndHover True
-    If IsCursorOnWindow(UserControl.hWnd, False) = True Then
-      RaiseEvent Click(GetCPUIndexFromMousePos)
+    If GetCPUIndexFromMousePos = m_PressedIndex Then
+      RaiseEvent Click(m_PressedIndex)
       If HadCapture = True Then StartHover True
     End If
   End If
@@ -390,19 +449,26 @@ End Sub
 
 Private Sub UserControl_ReadProperties(PropBag As PropertyBag)
   m_AutoUpdate = PropBag.ReadProperty(PROPNAME_AUTOUPDATE, False)
+  m_UpdateInterval = PropBag.ReadProperty(PROPNAME_UPDATEINTERVAL, CPU_UPDATE_INTERVAL)
+  m_AutoSize = PropBag.ReadProperty(PROPNAME_AUTOSIZE, True)
 End Sub
 
 Private Sub UserControl_Resize()
-  If UserControl.ScaleWidth <> FixedWindowSize.X Then UserControl.Width = ((UserControl.Width - UserControl.ScaleWidth) + FixedWindowSize.X): Exit Sub
-  If UserControl.ScaleHeight <> FixedWindowSize.Y Then UserControl.Height = ((UserControl.Height - UserControl.ScaleHeight) + FixedWindowSize.Y): Exit Sub
+  If m_AutoSize = True Then
+    If UserControl.ScaleWidth <> FixedWindowSize.X Then UserControl.Width = ((UserControl.Width - UserControl.ScaleWidth) + FixedWindowSize.X): Exit Sub
+    If UserControl.ScaleHeight <> FixedWindowSize.Y Then UserControl.Height = ((UserControl.Height - UserControl.ScaleHeight) + FixedWindowSize.Y): Exit Sub
+  End If
   Refresh True
 End Sub
 
 Private Sub UserControl_Terminate()
-  Call PdhCloseQuery(gQuery)
   KillUpdateTimer
+  Call PdhCloseQuery(gQuery)
+  gOpen = False
 End Sub
 
 Private Sub UserControl_WriteProperties(PropBag As PropertyBag)
   PropBag.WriteProperty PROPNAME_AUTOUPDATE, m_AutoUpdate, False
+  PropBag.WriteProperty PROPNAME_UPDATEINTERVAL, m_UpdateInterval, CPU_UPDATE_INTERVAL
+  PropBag.WriteProperty PROPNAME_AUTOSIZE, m_AutoSize, True
 End Sub

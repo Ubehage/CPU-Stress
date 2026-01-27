@@ -5,27 +5,27 @@ Begin VB.Form frmMain
    ClientHeight    =   4155
    ClientLeft      =   120
    ClientTop       =   465
-   ClientWidth     =   5400
+   ClientWidth     =   6390
    LinkTopic       =   "Form1"
    ScaleHeight     =   4155
-   ScaleWidth      =   5400
+   ScaleWidth      =   6390
    StartUpPosition =   3  'Windows Default
    Begin VB.CommandButton Command1 
       Caption         =   "Turn visual update on/off"
       Height          =   645
-      Left            =   1425
+      Left            =   4305
       TabIndex        =   1
-      Top             =   2820
+      Top             =   1725
       Width           =   1995
    End
    Begin CPU_Stress.CPUView CPUView1 
-      Height          =   2265
+      Height          =   3165
       Left            =   210
       TabIndex        =   0
       Top             =   180
-      Width           =   3915
-      _ExtentX        =   529
-      _ExtentY        =   873
+      Width           =   3315
+      _ExtentX        =   5847
+      _ExtentY        =   5583
    End
 End
 Attribute VB_Name = "frmMain"

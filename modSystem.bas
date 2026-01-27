@@ -159,7 +159,6 @@ Public Function GetCPUCoreCount() As CPU_Info
         GetCPUCoreCount.KernelsPerCore(GetCPUCoreCount.PhysicalCores) = CountKernelBits(info.ProcessorMask)
     End Select
   Next
-  'CopyMemory GetCPUCoreCount, r, LenB(r)
 End Function
 
 Public Function CountAllCores(cInfo As CPU_Info) As Long
