@@ -1,39 +1,33 @@
-# CPU-Stress Tool (Work-In-Progress / Experimental)
+# CPU-Stress Tool (Final release v1)
 
-Status: WIP · Experimental
+A minimal, deterministic CPU stress and control tool with per-core precision.
 
-A minimal, focused CPU stress & control tool with a compact UI that lets the user control every logical execution unit (kernel) individually.
-
-This repository is in development.
-The UI is fully functional.
+The application allows explicit control over each logical processor using isolated worker processes, providing predictable load behavior and a responsive UI even under full system stress.
 
 ---
 
-## Current status
-- UI almost functional.
-  - Visual view of the processor cores.
-  - Live update of the cpu's workload.
-  - Customizable delay between updates.
-  - Resizable window. The controls move automatically and maintain proportions.
-- Fully function CPU-killer stress function implemented.
-  - No functions to start the processes has been implemented yet.
-  
-## Vision
-- A compact, responsive CPU-stress application with a minimalistic GUI that exposes:
-  - Per-core and per-kernel control (start/stop stress test).
-  - User-configurable profiles (safe, test, destructive) and a visible kill-switch.
-  - No built-in safeguards. My vision is to make this tool a cpu-killer, and give the user full control and responsibility.
-  - No external dependencies - fully portable executable.
+## Features
+- Per-core CPU stress control (one process per logical core)
+- Visual overview of all logical processors
+- Click individual cores to start/stop stress
+- One-click “Engage all cores”
+- One-click global stop
+- Optional live CPU load monitoring
+- UI remains responsive even at 100% CPU load
+- Automatic cleanup: all stress processes terminate when the main window closes
 
-## Safety & usage guidance
-- This project will include code that intentionally overloads CPUs. Do NOT run stress features on hardware you do not own or in production environments.
-- For now the repository is safe. When stress features are added, they will be explicitly labeled and documented.
-- Recommended test environments (when stress code exists): isolated VMs, test rigs, or otherwise non-critical hardware with active thermal monitoring.
+  
+## Safety notice
+- This software intentionally generates sustained high CPU load.
+- Prolonged use can cause thermal throttling, instability, or hardware damage.
+- Use at your own risk.
+- Recommended environments:
+    - Test machines
+    - Virtual machines
+    - Systems with active thermal monitoring
 
 ## Screenshot
-![The UI so far](./screenshot.png)
+![A little overworked](./screenshot.png)
+
 ## License
 - MIT License. All code is free to use and modify.
-
-## Why source-only now?
-- Why not?

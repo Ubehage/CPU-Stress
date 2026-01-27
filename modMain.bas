@@ -6,7 +6,7 @@ Private Const CMD_SEP_VALUE As String = ":"
 Private Const CMD_RUN As String = "uigbfhs"
 Private Const CMD_INDEX As String = "uygbrf"
 
-Global Const APP_NAME As String = "Ubehage's CPU-Stress Tool (Work-in-Progress)"
+Global Const APP_NAME As String = "Ubehage's CPU-Stress Tool (v1)"
 
 Global Const FONT_MAIN As String = "Segoe UI"
 Global Const FONT_SECONDARY As String = "Consolas"
@@ -76,22 +76,21 @@ Private Function Start() As Integer
     Exit Function
   End If
   Call ReadCommandLine(Command)
-  'Call ReadCommandLine(GetNewCommandLineParameters(2))
   If DoRun = True Then
     If SharedMemOffset = 0 Then
       MsgBox "Invalid command parameters!" & vbCrLf & "This program will now exit.", vbOKOnly Or vbInformation, "Invalid command parameters"
-      Call CloseSharedMemory
+      UnloadAll
       Exit Function
     End If
     Start = 2
   Else
     If SharedMemOffset <> 0 Then
       MsgBox "Invalid command parameters!" & vbCrLf & "This program will now exit.", vbOKOnly Or vbInformation, "Invalid command parameters"
-      Call CloseSharedMemory
+      UnloadAll
       Exit Function
     ElseIf CheckPrevInstance() = False Then
       MsgBox "You can only run one instance of this program!", vbOKOnly Or vbInformation, APP_NAME
-      Call CloseSharedMemory
+      UnloadAll
       Exit Function
     End If
     Start = 1
@@ -109,7 +108,6 @@ Private Sub LoadStressForm()
 End Sub
 
 Public Sub UnloadAll()
-  ClearSharedMemoryIndex SharedMemOffset
   Call CloseSharedMemory
 End Sub
 
@@ -160,4 +158,42 @@ End Function
 Private Function GetNewCommandLineParameters(CPUIndex As Long) As String
   GetNewCommandLineParameters = CMD_RUN & CMD_SEP_COMMAND & _
                                 CMD_INDEX & CMD_SEP_VALUE & CStr(CPUIndex)
+End Function
+
+Public Sub LaunchNewStresser(Optional Index As Long = 0)
+  Dim cL As String, i As Long
+  If Index = 0 Then i = GetNextAvailableIndex() Else i = Index
+  If i = 0 Then Exit Sub
+  cL = GetNewCommandLine(i)
+  Call ReadFromSharedMemory(False, i)
+  With SharedMemory.Instances(i)
+    .mProcessID = -1
+    .mAssignedCore = i
+    .mCommand = MEMMSG_RUNSTRESS
+  End With
+  Call WriteToSharedMemory(False, i)
+  On Error GoTo ShellError
+  Shell cL, vbNormal
+ExitLaunch:
+  On Error GoTo 0
+  Exit Sub
+ShellError:
+  Select Case MsgBox("There was an error trying to launch a new process." & vbCrLf & Error, vbRetryCancel Or vbCritical, "Error - " & APP_NAME)
+    Case vbRetry
+      Resume
+    Case Else
+      Resume ExitLaunch
+  End Select
+End Sub
+
+Public Function GetNextAvailableIndex() As Long
+  Dim i As Long, r As Long
+  For i = 1 To TotalCores
+    With SharedMemory.Instances(i)
+      If .mProcessID = 0 Then
+        GetNextAvailableIndex = i
+        Exit For
+      End If
+    End With
+  Next
 End Function

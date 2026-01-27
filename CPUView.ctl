@@ -70,8 +70,6 @@ Dim CPULoad() As Double
 Dim oldCPULoad() As Double
 Dim CPUBusy() As Boolean
 
-Dim m_AliveProcesses As Long
-
 Dim ViewCols As Long
 Dim ViewRows As Long
 Dim ViewTop As Long
@@ -94,7 +92,6 @@ Dim WithEvents UpdateTimer As CPUTimer
 Attribute UpdateTimer.VB_VarHelpID = -1
 
 Public Event Click(Index As Long)
-Public Event AliveProcessesChanged()
 
 Public Property Get AutoUpdate() As Boolean
   AutoUpdate = m_AutoUpdate
@@ -105,8 +102,9 @@ End Property
 Public Property Get AutoSizeView() As CPUView_Autosize
   AutoSizeView = m_AutoSize
 End Property
-Public Property Get AliveProcesses() As Long
-  AliveProcesses = m_AliveProcesses
+Public Property Get CPUIsBusy(Index As Long) As Boolean
+  If (Index < 1 Or Index > TotalCores) Then Exit Property
+  CPUIsBusy = CPUBusy(Index)
 End Property
 Public Property Let AutoUpdate(New_AutoUpdate As Boolean)
   If m_AutoUpdate = New_AutoUpdate Then Exit Property
@@ -125,6 +123,12 @@ Public Property Let AutoSizeView(New_AutoSize As CPUView_Autosize)
   m_AutoSize = New_AutoSize
   UserControl.PropertyChanged PROPNAME_AUTOSIZE
   DoAutoSize
+End Property
+Public Property Let CPUIsBusy(Index As Long, New_Busy As Boolean)
+  If (Index < 1 Or Index > TotalCores) Then Exit Property
+  If CPUBusy(Index) = New_Busy Then Exit Property
+  CPUBusy(Index) = New_Busy
+  DrawCPURect Index
 End Property
 
 Public Sub Refresh(Optional FullRefresh As Boolean = False)
@@ -355,7 +359,6 @@ Private Function GetCPURectSize(XorY As XorY_Enum) As Long
       GetCPURectSize = (t / ViewCols)
     ElseIf XorY = xyY Then
       t = (UserControl.ScaleHeight - ((Screen.TwipsPerPixelY * KERNEL_PIXEL_INDENT) + ViewTop))
-      't = (UserControl.ScaleHeight - (Screen.TwipsPerPixelY * (KERNEL_PIXEL_INDENT + TOP_INDENT)))
       t = (t - (Screen.TwipsPerPixelY * (KERNEL_PIXEL_SPACING * (ViewRows - 1))))
       GetCPURectSize = (t / ViewRows)
     End If
@@ -484,33 +487,9 @@ Private Sub EndCapture()
   End If
 End Sub
 
-Private Sub CheckAliveProcesses()
-  Dim i As Long, p As Long
-  For i = 1 To TotalCores
-    With SharedMemory.Instances(i)
-      If IsProcessAlive(.mProcessID) = False Then
-        ClearSharedMemoryIndex i
-        CPUBusy(i) = False
-        DrawCPURect i
-      Else
-        p = (p + 1)
-        If CPUBusy(i) = False Then
-          CPUBusy(i) = True
-          DrawCPURect i
-        End If
-      End If
-    End With
-  Next
-  If p <> m_AliveProcesses Then
-    m_AliveProcesses = p
-    RaiseEvent AliveProcessesChanged
-  End If
-End Sub
-
 Private Sub UpdateTimer_Timer()
   UpdateTimer.Enabled = False
   UpdateView
-  CheckAliveProcesses
   If m_AutoUpdate = True Then UpdateTimer.Enabled = True
 End Sub
 

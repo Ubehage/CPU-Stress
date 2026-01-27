@@ -85,6 +85,7 @@ End Sub
 
 Private Sub Form_Unload(Cancel As Integer)
   KillIdleTimer
+  ClearSharedMemoryIndex SharedMemOffset
   UnloadAll
 End Sub
 

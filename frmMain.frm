@@ -3,25 +3,25 @@ Begin VB.Form frmMain
    BackColor       =   &H00202020&
    BorderStyle     =   5  'Sizable ToolWindow
    Caption         =   "Form1"
-   ClientHeight    =   6585
+   ClientHeight    =   5865
    ClientLeft      =   120
    ClientTop       =   465
-   ClientWidth     =   10440
+   ClientWidth     =   9060
+   Icon            =   "frmMain.frx":0000
    LinkTopic       =   "Form1"
    MaxButton       =   0   'False
    MinButton       =   0   'False
-   ScaleHeight     =   6585
-   ScaleWidth      =   10440
-   ShowInTaskbar   =   0   'False
+   ScaleHeight     =   5865
+   ScaleWidth      =   9060
    StartUpPosition =   3  'Windows Default
-   Begin CPU_Stress.StatusBar StatusBar 
+   Begin CPU_Stress.StatusBar Status1 
       Align           =   2  'Align Bottom
       Height          =   315
       Left            =   0
       TabIndex        =   9
-      Top             =   6270
-      Width           =   10440
-      _ExtentX        =   18415
+      Top             =   5550
+      Width           =   9060
+      _ExtentX        =   15981
       _ExtentY        =   556
    End
    Begin CPU_Stress.Button cmdStartAll 
@@ -162,13 +162,33 @@ Attribute VB_PredeclaredId = True
 Attribute VB_Exposed = False
 Option Explicit
 
-Dim LastGoodTextVal
+Private Const STATUS_TEXT As String = "%p% active processes."
+
+Private Const SETTINGS_APPNAME As String = "UbesCPUStress"
+Private Const SETTINGS_SECTION As String = "Settings"
+Private Const SETTINGS_ONTOP As String = "OnTop"
+Private Const SETTINGS_LIVEUPDATE As String = "LiveUpdate"
+Private Const SETTINGS_UPDATEINTERVAL As String = "UpdateInterval"
+Private Const SETTINGS_LEFT As String = "WindowLeft"
+Private Const SETTINGS_TOP As String = "WindowTop"
+Private Const SETTINGS_WIDTH As String = "WindowWidth"
+Private Const SETTINGS_HEIGHT As String = "WindowHeight"
+
+Dim o_OnTop As Boolean
+Dim o_LiveUpdate As Boolean
+Dim o_UpdateInterval As Long
+
+Dim LastGoodTextVal As Long
+
+Dim WithEvents StatusTimer As CPUTimer
+Attribute StatusTimer.VB_VarHelpID = -1
 
 Friend Sub SetForm()
   SetInitialValues
   Me.Caption = APP_NAME
-  WindowOnTop Me.hWnd, True
   Me.Show
+  SetStatusTimer
+  SetProcessPriority NORMAL_PRIORITY_CLASS
 End Sub
 
 Private Sub MoveObjects()
@@ -184,10 +204,7 @@ Private Sub MoveObjects()
   frmOptions.Width = (chkOnTop.Width + (chkOnTop.Left * 2))
   frmOptions.Move (Me.ScaleWidth - (frmOptions.Width + CPUView1.Left)), CPUView1.Top, frmOptions.Width, ((cmdInterval.Top + cmdInterval.Height) + chkOnTop.Left)
   CPUView1.Width = (frmOptions.Left - (CPUView1.Left * 2))
-  CPUView1.Height = (StatusBar.Top - (CPUView1.Top + Screen.TwipsPerPixelY))
-  'frmOptions.Move ((CPUView1.Left + CPUView1.Width) + (Screen.TwipsPerPixelX * 5)), CPUView1.Top, (chkOnTop.Width + (chkOnTop.Left * 2)), ((cmdInterval.Top + cmdInterval.Height) + chkOnTop.Left)
-  'Me.Width = ((Me.Width - Me.ScaleWidth) + ((frmOptions.Left + frmOptions.Width) + CPUView1.Left))
-  'Me.Height = ((Me.Height - Me.ScaleHeight) + (CPUView1.Height + (CPUView1.Top * 2)))
+  CPUView1.Height = (Status1.Top - (CPUView1.Top + Screen.TwipsPerPixelY))
   Dim t As Long, v As Long
   t = ((frmOptions.Top + frmOptions.Height) + (Screen.TwipsPerPixelY * 5))
   v = ((Me.ScaleHeight - t) - (cmdStartAll.Height * 2))
@@ -203,9 +220,40 @@ MoveError:
 End Sub
 
 Private Sub SetInitialValues()
+  LoadUISettings
+  chkOnTop.Value = IIf(o_OnTop, vbChecked, vbUnchecked)
+  chkLiveUpdate.Value = IIf(o_LiveUpdate, vbChecked, vbUnchecked)
+  CPUView1.UpdateInterval = o_UpdateInterval
   txtInterval.Text = CStr(CPUView1.UpdateInterval)
-  chkLiveUpdate.Value = IIf(CPUView1.AutoUpdate, vbChecked, vbUnchecked)
-  StatusBar.Text = ""
+  Status1.Text = ""
+End Sub
+
+Private Sub LoadUISettings()
+  Dim tRect As RECT
+  o_OnTop = GetSetting(SETTINGS_APPNAME, SETTINGS_SECTION, SETTINGS_ONTOP, True)
+  o_LiveUpdate = GetSetting(SETTINGS_APPNAME, SETTINGS_SECTION, SETTINGS_LIVEUPDATE, True)
+  o_UpdateInterval = GetSetting(SETTINGS_APPNAME, SETTINGS_SECTION, SETTINGS_UPDATEINTERVAL, 1000)
+  With tRect
+    .Left = GetSetting(SETTINGS_APPNAME, SETTINGS_SECTION, SETTINGS_LEFT, 0)
+    .Top = GetSetting(SETTINGS_APPNAME, SETTINGS_SECTION, SETTINGS_TOP, 0)
+    .Right = GetSetting(SETTINGS_APPNAME, SETTINGS_SECTION, SETTINGS_WIDTH, 0)
+    .Bottom = GetSetting(SETTINGS_APPNAME, SETTINGS_SECTION, SETTINGS_HEIGHT, 0)
+    If (.Left <> 0 And .Top <> 0) Then
+      If (.Right <> 0 And .Bottom <> 0) Then
+        Me.Move .Left, .Top, .Right, .Bottom
+      End If
+    End If
+  End With
+End Sub
+
+Private Sub SaveUISettings()
+  SaveSetting SETTINGS_APPNAME, SETTINGS_SECTION, SETTINGS_ONTOP, (chkOnTop.Value = vbChecked)
+  SaveSetting SETTINGS_APPNAME, SETTINGS_SECTION, SETTINGS_LIVEUPDATE, (chkLiveUpdate.Value = vbChecked)
+  SaveSetting SETTINGS_APPNAME, SETTINGS_SECTION, SETTINGS_UPDATEINTERVAL, CPUView1.UpdateInterval
+  SaveSetting SETTINGS_APPNAME, SETTINGS_SECTION, SETTINGS_LEFT, Me.Left
+  SaveSetting SETTINGS_APPNAME, SETTINGS_SECTION, SETTINGS_TOP, Me.Top
+  SaveSetting SETTINGS_APPNAME, SETTINGS_SECTION, SETTINGS_WIDTH, Me.Width
+  SaveSetting SETTINGS_APPNAME, SETTINGS_SECTION, SETTINGS_HEIGHT, Me.Height
 End Sub
 
 Private Sub CheckIntervalText()
@@ -214,6 +262,81 @@ Private Sub CheckIntervalText()
   If v > 0 Then e = Not (v = CPUView1.UpdateInterval) Else e = False
   If (e = True And CPUView1.AutoUpdate = True) Then cmdInterval.Enabled = True Else cmdInterval.Enabled = False
   txtInterval.Enabled = CPUView1.AutoUpdate
+End Sub
+
+Private Sub SetStatusTimer()
+  KillStatusTimer
+  Set StatusTimer = New CPUTimer
+  StatusTimer.Interval = 500
+  StatusTimer.Enabled = True
+End Sub
+
+Private Sub KillStatusTimer()
+  If StatusTimer Is Nothing Then Exit Sub
+  StatusTimer.Enabled = False
+  Set StatusTimer = Nothing
+End Sub
+
+Private Sub CheckActiveProcesses()
+  Dim i As Long, p As Long
+  Call ReadFromSharedMemory(True)
+  For i = 1 To TotalCores
+    With SharedMemory.Instances(i)
+      Select Case .mProcessID
+        Case 0, -1
+          CPUView1.CPUIsBusy(i) = False
+        Case Else
+          If IsProcessAlive(.mProcessID) = False Then
+            ClearSharedMemoryIndex i
+            CPUView1.CPUIsBusy(i) = False
+          Else
+            If .mStatus = MEMSTATUS_RUNNING Then
+              p = (p + 1)
+              CPUView1.CPUIsBusy(i) = True
+            Else
+              CPUView1.CPUIsBusy(i) = False
+            End If
+          End If
+      End Select
+    End With
+  Next
+  Status1.Text = Replace$(STATUS_TEXT, "%p%", CStr(p))
+  cmdStopAll.Enabled = Not (p = 0)
+  cmdStartAll.Enabled = (p < TotalCores)
+End Sub
+
+Private Sub StartAllStressers()
+  Dim i As Long
+  Call ReadFromSharedMemory(True)
+  For i = 1 To TotalCores
+    With SharedMemory.Instances(i)
+      If .mProcessID = -1 Then
+        'reserved
+      ElseIf .mProcessID = 0 Then
+        LaunchNewStresser i
+      Else
+        If IsProcessAlive(.mProcessID) = True Then
+          If .mStatus = MEMSTATUS_IDLE Then
+            .mCommand = MEMMSG_RUNSTRESS
+            Call WriteToSharedMemory(False, i)
+          End If
+        End If
+      End If
+    End With
+  Next
+End Sub
+
+Private Sub CloseAllStressers(Optional StopOnly As Boolean = False)
+  Dim i As Long
+  Call ReadFromSharedMemory(True)
+  For i = 1 To TotalCores
+    With SharedMemory.Instances(i)
+      If .mProcessID <> 0 Then
+        If StopOnly = True Then .mCommand = MEMMSG_STOPSTRESS Else .mCommand = MEMMSG_EXIT
+        Call WriteToSharedMemory(False, i)
+      End If
+    End With
+  Next
 End Sub
 
 Private Sub chkLiveUpdate_Click()
@@ -232,12 +355,56 @@ Private Sub cmdInterval_Click()
   CheckIntervalText
 End Sub
 
+Private Sub cmdStartAll_Click()
+  cmdStartAll.Enabled = False
+  cmdStopAll.Enabled = False
+  StartAllStressers
+End Sub
+
+Private Sub cmdStopAll_Click()
+  CloseAllStressers True
+End Sub
+
+Private Sub CPUView1_Click(Index As Long)
+  Call ReadFromSharedMemory(False, Index)
+  With SharedMemory.Instances(Index)
+    If .mProcessID = 0 Then
+      LaunchNewStresser Index
+    Else
+      If .mProcessID <> -1 Then
+        If IsProcessAlive(.mProcessID) = False Then
+          ClearSharedMemoryIndex Index
+          LaunchNewStresser Index
+        Else
+          If .mStatus = MEMSTATUS_RUNNING Then
+            .mCommand = MEMMSG_STOPSTRESS
+          ElseIf .mStatus = MEMSTATUS_IDLE Then
+            .mCommand = MEMMSG_RUNSTRESS
+          End If
+          Call WriteToSharedMemory(False, Index)
+        End If
+      End If
+    End If
+  End With
+End Sub
+
 Private Sub Form_Resize()
   MoveObjects
 End Sub
 
 Private Sub Form_Unload(Cancel As Integer)
+  KillStatusTimer
+  ClearSharedMemoryIndex SharedMemOffset
+  CloseAllStressers
+  SaveUISettings
   UnloadAll
+End Sub
+
+Private Sub StatusTimer_Timer()
+  StatusTimer.Enabled = False
+  If ExitNow Then Unload Me
+  CheckActiveProcesses
+  StatusTimer.Enabled = True
 End Sub
 
 Private Sub txtInterval_Change()
