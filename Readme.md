@@ -31,7 +31,7 @@ The UI is fully functional, but all the core functions for stressing the cpu is 
 - Recommended test environments (when stress code exists): isolated VMs, test rigs, or otherwise non-critical hardware with active thermal monitoring.
 
 ## Screenshot
-!The UI so far(./screenshot.png)
+![The UI so far](./screenshot.png)
 ## License
 - MIT License. All code is free to use and modify.
 
