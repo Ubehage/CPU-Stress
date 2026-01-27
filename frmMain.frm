@@ -320,6 +320,9 @@ Private Sub StartAllStressers()
             .mCommand = MEMMSG_RUNSTRESS
             Call WriteToSharedMemory(False, i)
           End If
+        Else
+          ClearSharedMemoryIndex i
+          LaunchNewStresser i
         End If
       End If
     End With
