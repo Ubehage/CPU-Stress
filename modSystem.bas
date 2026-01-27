@@ -49,8 +49,8 @@ Public Enum COMMONCONTROLS_CLASSES
 End Enum
 
 Public Type POINTAPI
-  x As Long
-  y As Long
+  X As Long
+  Y As Long
 End Type
 
 Public Type RECT
@@ -76,9 +76,19 @@ Private Type SYSTEM_LOGICAL_PROCESSOR_INFORMATION
     Reserved(1) As Currency
 End Type
 
-Private Declare Function SetWindowPos Lib "user32.dll" (ByVal hWnd As Long, ByVal hWndInsertAfter As Long, ByVal x As Long, ByVal y As Long, ByVal cX As Long, ByVal cY As Long, ByVal wFlags As Long) As Long
+Private Declare Function SetWindowPos Lib "user32.dll" (ByVal hWnd As Long, ByVal hWndInsertAfter As Long, ByVal X As Long, ByVal Y As Long, ByVal cX As Long, ByVal cY As Long, ByVal wFlags As Long) As Long
 Private Declare Sub InitCommonControls9x Lib "comctl32" Alias "InitCommonControls" ()
 Private Declare Function InitCommonControlsEx Lib "comctl32" (lpInitCtrls As tagINITCOMMONCONTROLSEX) As Boolean
+
+Public Declare Function GetCursorPos Lib "user32" (lpPoint As POINTAPI) As Long
+Public Declare Function SetCapture Lib "user32" (ByVal hWnd As Long) As Long
+Public Declare Function ReleaseCapture Lib "user32" () As Long
+
+Public Declare Sub GetWindowRect Lib "user32" (ByVal hWnd As Long, ByRef WindowRect As RECT)
+Public Declare Function WindowFromPoint Lib "user32" (ByVal X As Long, ByVal Y As Long) As Long
+Public Declare Function ClientToScreen Lib "user32" (ByVal hWnd As Long, lpPoint As POINTAPI) As Long
+Public Declare Function ScreenToClient Lib "user32" (ByVal hWnd As Long, ByRef lpPoint As POINTAPI) As Long
+Public Declare Function GetClientRect Lib "user32" (ByVal hWnd As Long, lpRect As RECT) As Long
 
 Private Declare Function GetLogicalProcessorInformation Lib "kernel32" (ByRef Buffer As Any, ByRef ReturnLength As Long) As Long
 
@@ -112,10 +122,20 @@ End Function
 
 Public Function IsPointInRect(pRect As RECT, pPoint As POINTAPI) As Boolean
   With pRect
-    If (pPoint.x >= .Left And pPoint.x <= .Right) Then
-      If (pPoint.y >= .Top And pPoint.y <= .Bottom) Then IsPointInRect = True
+    If (pPoint.X >= .Left And pPoint.X <= .Right) Then
+      If (pPoint.Y >= .Top And pPoint.Y <= .Bottom) Then IsPointInRect = True
     End If
   End With
+End Function
+
+Public Function IsCursorOnWindow(hWnd As Long, Optional MouseIsDown As Boolean = False) As Boolean
+  Dim mPos As POINTAPI, wRect As RECT, hTop As Long
+  Call GetCursorPos(mPos)
+  Call GetWindowRect(hWnd, wRect)
+  If IsPointInRect(wRect, mPos) = False Then If MouseIsDown = False Then Exit Function
+  hTop = WindowFromPoint(mPos.X, mPos.Y)
+  If hTop <> hWnd Then If MouseIsDown = False Then Exit Function
+  IsCursorOnWindow = True
 End Function
 
 Public Function GetCPUCoreCount() As CPU_Info
