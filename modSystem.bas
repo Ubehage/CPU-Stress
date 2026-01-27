@@ -3,6 +3,12 @@ Option Explicit
 
 Global Const INVALID_HANDLE_VALUE As Long = -1&
 
+Global Const ERROR_ALREADY_EXISTS As Long = 183&
+
+Private Const SYNCHRONIZE As Long = &H100000
+Private Const WAIT_OBJECT_0 As Long = 0&
+Private Const WAIT_TIMEOUT As Long = &H102&
+
 Private Const HWND_NOTOPMOST  As Long = -2
 Private Const HWND_TOPMOST  As Long = -1
 Private Const SWP_NOMOVE  As Long = &H2
@@ -27,6 +33,9 @@ Private Const ICC_NATIVEFNTCTL_CLASS  As Long = 2000
 Private Const ICC_STANDARD_CLASSES  As Long = 4000
 Private Const ICC_LINK_CLASS  As Long = 8000
 
+Global Const HKEY_LOCAL_MACHINE = &H80000002
+Global Const KEY_READ = &H20019
+
 Public Enum COMMONCONTROLS_CLASSES
   ccListView_Classes = ICC_LISTVIEW_CLASSES
   ccTreeView_Classes = ICC_TREEVIEW_CLASSES
@@ -49,7 +58,7 @@ Public Enum COMMONCONTROLS_CLASSES
 End Enum
 
 Public Type POINTAPI
-  X As Long
+  x As Long
   Y As Long
 End Type
 
@@ -61,6 +70,7 @@ Public Type RECT
 End Type
 
 Public Type CPU_Info
+  Name As String
   PhysicalCores As Long
   KernelsPerCore() As Long
 End Type
@@ -76,7 +86,7 @@ Private Type SYSTEM_LOGICAL_PROCESSOR_INFORMATION
     Reserved(1) As Currency
 End Type
 
-Private Declare Function SetWindowPos Lib "user32.dll" (ByVal hWnd As Long, ByVal hWndInsertAfter As Long, ByVal X As Long, ByVal Y As Long, ByVal cX As Long, ByVal cY As Long, ByVal wFlags As Long) As Long
+Private Declare Function SetWindowPos Lib "user32.dll" (ByVal hWnd As Long, ByVal hWndInsertAfter As Long, ByVal x As Long, ByVal Y As Long, ByVal cX As Long, ByVal cY As Long, ByVal wFlags As Long) As Long
 Private Declare Sub InitCommonControls9x Lib "comctl32" Alias "InitCommonControls" ()
 Private Declare Function InitCommonControlsEx Lib "comctl32" (lpInitCtrls As tagINITCOMMONCONTROLSEX) As Boolean
 
@@ -85,14 +95,39 @@ Public Declare Function SetCapture Lib "user32" (ByVal hWnd As Long) As Long
 Public Declare Function ReleaseCapture Lib "user32" () As Long
 
 Public Declare Sub GetWindowRect Lib "user32" (ByVal hWnd As Long, ByRef WindowRect As RECT)
-Public Declare Function WindowFromPoint Lib "user32" (ByVal X As Long, ByVal Y As Long) As Long
+Public Declare Function WindowFromPoint Lib "user32" (ByVal x As Long, ByVal Y As Long) As Long
 Public Declare Function ClientToScreen Lib "user32" (ByVal hWnd As Long, lpPoint As POINTAPI) As Long
 Public Declare Function ScreenToClient Lib "user32" (ByVal hWnd As Long, ByRef lpPoint As POINTAPI) As Long
 Public Declare Function GetClientRect Lib "user32" (ByVal hWnd As Long, lpRect As RECT) As Long
 
+Private Declare Function GetCurrentProcessId Lib "kernel32" () As Long
+Private Declare Function OpenProcess Lib "kernel32" (ByVal dwDesiredAccess As Long, ByVal bInheritHandle As Long, ByVal dwProcessId As Long) As Long
+Private Declare Function WaitForSingleObject Lib "kernel32" (ByVal hHandle As Long, ByVal dwMilliseconds As Long) As Long
+Public Declare Function CloseHandle Lib "kernel32" (ByVal hObject As Long) As Long
+
+Public Declare Sub ZeroMemory Lib "kernel32.dll" Alias "RtlZeroMemory" (Destination As Any, ByVal Length As Long)
+Public Declare Sub CopyMemory Lib "kernel32" Alias "RtlMoveMemory" (ByRef hpvDest As Any, ByRef hpvSource As Any, ByVal cbCopy As Long)
+Public Declare Sub CopyMemoryByVal Lib "kernel32" Alias "RtlMoveMemory" (ByVal Destination As Long, ByRef Source As Any, ByVal Length As Long)
+
+Public Declare Function RegOpenKeyEx Lib "advapi32.dll" Alias "RegOpenKeyExA" (ByVal hKey As Long, ByVal lpSubKey As String, ByVal ulOptions As Long, ByVal samDesired As Long, phkResult As Long) As Long
+Public Declare Function RegQueryValueEx Lib "advapi32.dll" Alias "RegQueryValueExA" (ByVal hKey As Long, ByVal lpValueName As String, ByVal lpReserved As Long, lpType As Long, lpData As Any, lpcbData As Long) As Long
+Public Declare Function RegCloseKey Lib "advapi32.dll" (ByVal hKey As Long) As Long
+
 Private Declare Function GetLogicalProcessorInformation Lib "kernel32" (ByRef Buffer As Any, ByRef ReturnLength As Long) As Long
 
-Public Declare Sub CopyMemory Lib "kernel32" Alias "RtlMoveMemory" (ByRef hpvDest As Any, ByRef hpvSource As Any, ByVal cbCopy As Long)
+Public Function GetMypId() As Long
+  GetMypId = GetCurrentProcessId()
+End Function
+
+Public Function IsProcessAlive(ProcessId As Long) As Boolean
+  Dim hProc As Long, r As Long
+  If ProcessId = 0 Then Exit Function
+  hProc = OpenProcess(SYNCHRONIZE, 0, ProcessId)
+  If hProc = 0 Then Exit Function
+  r = WaitForSingleObject(hProc, 0)
+  Call CloseHandle(hProc)
+  IsProcessAlive = (r = WAIT_TIMEOUT)
+End Function
 
 Public Sub WindowOnTop(hWnd As Long, OnTop As Boolean)
   Dim wFlags As Long
@@ -122,7 +157,7 @@ End Function
 
 Public Function IsPointInRect(pRect As RECT, pPoint As POINTAPI) As Boolean
   With pRect
-    If (pPoint.X >= .Left And pPoint.X <= .Right) Then
+    If (pPoint.x >= .Left And pPoint.x <= .Right) Then
       If (pPoint.Y >= .Top And pPoint.Y <= .Bottom) Then IsPointInRect = True
     End If
   End With
@@ -133,7 +168,7 @@ Public Function IsCursorOnWindow(hWnd As Long, Optional MouseIsDown As Boolean =
   Call GetCursorPos(mPos)
   Call GetWindowRect(hWnd, wRect)
   If IsPointInRect(wRect, mPos) = False Then If MouseIsDown = False Then Exit Function
-  hTop = WindowFromPoint(mPos.X, mPos.Y)
+  hTop = WindowFromPoint(mPos.x, mPos.Y)
   If hTop <> hWnd Then If MouseIsDown = False Then Exit Function
   IsCursorOnWindow = True
 End Function
@@ -180,4 +215,34 @@ Private Function CountKernelBits(ByVal kMask As Long) As Long
   Loop
   If (kMask And &H80000000) <> 0 Then r = (r + 1)
   CountKernelBits = r
+End Function
+
+Public Function GetCPUName() As String
+  Dim hKey As Long, res As Long, sPath As String, sValue As String, nSize As Long
+  sPath = "HARDWARE\DESCRIPTION\System\CentralProcessor\0"
+  res = RegOpenKeyEx(HKEY_LOCAL_MACHINE, sPath, 0, KEY_READ, hKey)
+  If res = 0 Then
+    Call RegQueryValueEx(hKey, "ProcessorNameString", 0, 0, ByVal 0&, nSize)
+    If nSize > 0 Then
+      sValue = String$(nSize, Chr$(0))
+      Call RegQueryValueEx(hKey, "ProcessorNameString", 0, 0, ByVal sValue, nSize)
+      GetCPUName = Trim$(Left$(sValue, (InStr(sValue, Chr$(0)) - 1)))
+    Else
+      GetCPUName = "Unknown Processor"
+    End If
+    Call RegCloseKey(hKey)
+  Else
+    GetCPUName = "Unknown Processor"
+  End If
+End Function
+
+Public Function CheckPrevInstance() As Boolean
+  If App.PrevInstance = True Then
+    With SharedMemory.Instances(0)
+      If .mProcessID <> 0 Then
+        If IsProcessAlive(.mProcessID) Then Exit Function
+      End If
+    End With
+  End If
+  CheckPrevInstance = True
 End Function

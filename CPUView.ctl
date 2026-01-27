@@ -73,6 +73,7 @@ Dim oldCPULoad() As Double
 
 Dim ViewCols As Long
 Dim ViewRows As Long
+Dim ViewTop As Long
 
 Dim m_IsCapturing As Boolean
 Dim m_IsHovering As Boolean
@@ -124,6 +125,7 @@ End Property
 Public Sub Refresh(Optional FullRefresh As Boolean = False)
   UserControl.Cls
   DrawBorderAndTitle
+  DrawCPUName
   DrawCPURects
 End Sub
 
@@ -154,10 +156,29 @@ End Sub
 
 Private Sub DrawTitle()
   With UserControl
+    With .Font
+      .Name = FONT_MAIN
+      .Size = FONTSIZE_MAIN
+      .Bold = True
+    End With
     .CurrentX = (Screen.TwipsPerPixelX * 10)
     .CurrentY = Screen.TwipsPerPixelY
   End With
   UserControl.Print CPUVIEW_TITLE
+  ViewTop = (UserControl.CurrentY + Screen.TwipsPerPixelY)
+End Sub
+
+Private Sub DrawCPUName()
+  Dim x As Long
+  With UserControl.Font
+    .Name = FONT_SECONDARY
+    .Size = FONTSIZE_SECONDARY
+    .Bold = True
+  End With
+  UserControl.CurrentX = ((UserControl.ScaleWidth - UserControl.TextWidth(CPUInfo.Name)) \ 2)
+  UserControl.CurrentY = ViewTop
+  UserControl.Print CPUInfo.Name
+  ViewTop = (UserControl.CurrentY + Screen.TwipsPerPixelY)
 End Sub
 
 Private Sub DrawCPURects(Optional FullRedraw As Boolean = False)
@@ -269,22 +290,22 @@ End Sub
 
 Private Sub SetCPURECTs()
   Dim i As Long, j As Long, c As Long
-  Dim X As Long, Y As Long, w As Long, h As Long
+  Dim x As Long, Y As Long, w As Long, h As Long
   SetRowsAndCols
-  Y = (Screen.TwipsPerPixelY * TOP_INDENT)
+  Y = ViewTop
   w = GetCPURectSize(xyX)
   h = GetCPURectSize(xyY)
   For i = 1 To ViewRows
-    X = (Screen.TwipsPerPixelX * KERNEL_PIXEL_INDENT)
+    x = (Screen.TwipsPerPixelX * KERNEL_PIXEL_INDENT)
     For j = 1 To ViewCols
       c = (c + 1)
       If c > TotalCores Then Exit Sub
       With cpuRECTs(c)
-        .Left = X
+        .Left = x
         .Top = Y
         .Right = (.Left + w)
         .Bottom = (.Top + h)
-        X = (.Right + (Screen.TwipsPerPixelX * KERNEL_PIXEL_SPACING))
+        x = (.Right + (Screen.TwipsPerPixelX * KERNEL_PIXEL_SPACING))
       End With
     Next
     Y = (cpuRECTs(c).Bottom + (Screen.TwipsPerPixelY * KERNEL_PIXEL_SPACING))
@@ -320,7 +341,8 @@ Private Function GetCPURectSize(XorY As XorY_Enum) As Long
       t = (t - (Screen.TwipsPerPixelX * (KERNEL_PIXEL_SPACING * (ViewCols - 1))))
       GetCPURectSize = (t / ViewCols)
     ElseIf XorY = xyY Then
-      t = (UserControl.ScaleHeight - (Screen.TwipsPerPixelY * (KERNEL_PIXEL_INDENT + TOP_INDENT)))
+      t = (UserControl.ScaleHeight - ((Screen.TwipsPerPixelY * KERNEL_PIXEL_INDENT) + ViewTop))
+      't = (UserControl.ScaleHeight - (Screen.TwipsPerPixelY * (KERNEL_PIXEL_INDENT + TOP_INDENT)))
       t = (t - (Screen.TwipsPerPixelY * (KERNEL_PIXEL_SPACING * (ViewRows - 1))))
       GetCPURectSize = (t / ViewRows)
     End If
@@ -334,6 +356,7 @@ End Sub
 
 Private Sub GetCPUInfo()
   CPUInfo = GetCPUCoreCount()
+  CPUInfo.Name = GetCPUName()
   TotalCores = CountAllCores(CPUInfo)
   ReDim cpuRECTs(1 To TotalCores) As RECT
   ReDim CPULoad(TotalCores - 1) As Double
@@ -349,14 +372,14 @@ Private Function GetCPURectsTotalSize() As POINTAPI
     End With
   Next
   With GetCPURectsTotalSize
-    .X = w
+    .x = w
     .Y = h
   End With
 End Function
 
 Private Sub SetFixedWindowSize()
   With GetCPURectsTotalSize
-    FixedWindowSize.X = (.X + (Screen.TwipsPerPixelX * KERNEL_PIXEL_SPACING))
+    FixedWindowSize.x = (.x + (Screen.TwipsPerPixelX * KERNEL_PIXEL_SPACING))
     FixedWindowSize.Y = (.Y + (Screen.TwipsPerPixelY * KERNEL_PIXEL_SPACING))
   End With
 End Sub
@@ -397,11 +420,11 @@ Private Function GetCPUIndexFromMousePos() As Long
   Dim i As Long, p As POINTAPI, r As Long
   Call GetCursorPos(p)
   Call ScreenToClient(UserControl.hWnd, p)
-  p.X = (p.X * Screen.TwipsPerPixelX)
+  p.x = (p.x * Screen.TwipsPerPixelX)
   p.Y = (p.Y * Screen.TwipsPerPixelY)
   For i = 1 To TotalCores
     With cpuRECTs(i)
-      If (p.X >= .Left And p.X <= .Right) Then
+      If (p.x >= .Left And p.x <= .Right) Then
         If (p.Y >= .Top And p.Y <= .Bottom) Then
           r = i
           Exit For
@@ -467,7 +490,7 @@ Private Sub UserControl_InitProperties()
   m_AutoSize = CPUView_Autosize.ViewAutoSize
 End Sub
 
-Private Sub UserControl_MouseDown(Button As Integer, Shift As Integer, X As Single, Y As Single)
+Private Sub UserControl_MouseDown(Button As Integer, Shift As Integer, x As Single, Y As Single)
   If Button = vbLeftButton Then
     If IsCursorOnWindow(UserControl.hWnd) Then
       m_MouseIsDown = True
@@ -478,13 +501,13 @@ Private Sub UserControl_MouseDown(Button As Integer, Shift As Integer, X As Sing
   End If
 End Sub
 
-Private Sub UserControl_MouseMove(Button As Integer, Shift As Integer, X As Single, Y As Single)
+Private Sub UserControl_MouseMove(Button As Integer, Shift As Integer, x As Single, Y As Single)
   StartHover
   If m_IsCapturing = False Then Exit Sub
   If IsCursorOnWindow(UserControl.hWnd, m_MouseIsDown) = False Then EndHover
 End Sub
 
-Private Sub UserControl_MouseUp(Button As Integer, Shift As Integer, X As Single, Y As Single)
+Private Sub UserControl_MouseUp(Button As Integer, Shift As Integer, x As Single, Y As Single)
   Dim HadCapture As Boolean
   If (Button = vbLeftButton And m_MouseIsDown = True) Then
     HadCapture = m_IsCapturing
@@ -508,7 +531,7 @@ End Sub
 
 Private Sub UserControl_Resize()
   If m_AutoSize = FixedSize Then
-    If UserControl.ScaleWidth <> FixedWindowSize.X Then UserControl.Width = ((UserControl.Width - UserControl.ScaleWidth) + FixedWindowSize.X): Exit Sub
+    If UserControl.ScaleWidth <> FixedWindowSize.x Then UserControl.Width = ((UserControl.Width - UserControl.ScaleWidth) + FixedWindowSize.x): Exit Sub
     If UserControl.ScaleHeight <> FixedWindowSize.Y Then UserControl.Height = ((UserControl.Height - UserControl.ScaleHeight) + FixedWindowSize.Y): Exit Sub
   ElseIf m_AutoSize = ViewAutoSize Then
     DoAutoSize

@@ -1,6 +1,11 @@
 Attribute VB_Name = "modMain"
 Option Explicit
 
+Private Const CMD_SEP_COMMAND As String = ";"
+Private Const CMD_SEP_VALUE As String = ":"
+Private Const CMD_RUN As String = "uigbfhs"
+Private Const CMD_INDEX As String = "uygbrf"
+
 Global Const APP_NAME As String = "Ubehage's CPU-Stress Tool (Work-in-Progress)"
 
 Global Const FONT_MAIN As String = "Segoe UI"
@@ -42,20 +47,61 @@ Public Enum XorY_Enum
   xyY = &H2
 End Enum
 
+Dim DoRun As Boolean
+
 Global ChangedByCode As Boolean
 
 Global IsRunningInIDE As Boolean
 
+Dim Stresser As StressClient
+
 Sub Main()
+  Dim s As Integer
   IsRunningInIDE = IsInIDE()
   Call InitCommonControls
-  
-  LoadMainForm
+  s = Start
+  If s = 0 Then Exit Sub
+  If s = 1 Then
+    LoadMainForm
+  ElseIf s = 2 Then
+    Set Stresser = New StressClient
+    Stresser.Start
+  End If
+  SharedMemory.Instances(SharedMemOffset).mProcessID = GetMypId
+  Call WriteToSharedMemory(False)
 End Sub
+
+Private Function Start() As Integer
+  If Not OpenSharedMemory() = True Then
+    MsgBox "Could not open shared memory!" & vbCrLf & "This program cannot continue.", vbOKOnly Or vbCritical, "Error opening shared memory"
+    Exit Function
+  End If
+  Call ReadCommandLine(Command)
+  If DoRun = True Then
+    If SharedMemOffset = 0 Then
+      MsgBox "Invalid command parameters!" & vbCrLf & "This program will now exit.", vbOKOnly Or vbInformation, "Invalid command parameters"
+      Exit Function
+    End If
+    Start = 2
+  Else
+    If SharedMemOffset <> 0 Then
+      MsgBox "Invalid command parameters!" & vbCrLf & "This program will now exit.", vbOKOnly Or vbInformation, "Invalid command parameters"
+      Exit Function
+    ElseIf CheckPrevInstance() = False Then
+      MsgBox "You can only run one instance of this program!", vbOKOnly Or vbInformation, APP_NAME
+      Exit Function
+    End If
+    Start = 1
+  End If
+End Function
 
 Private Sub LoadMainForm()
   Load frmMain
   frmMain.SetForm
+End Sub
+
+Public Sub UnloadAll()
+  Call CloseSharedMemory
 End Sub
 
 Public Function IsInIDE() As Boolean
@@ -71,3 +117,22 @@ Private Function MakeIDECheck(bSet As Boolean) As Boolean
   bSet = True
   MakeIDECheck = True
 End Function
+
+Private Sub ReadCommandLine(CommandLine As String)
+  Dim i As Integer, cArr() As String, c As String, v As String, vArr() As String
+  cArr() = Split(CommandLine, CMD_SEP_COMMAND)
+  For i = LBound(cArr) To UBound(cArr)
+    c = cArr(i)
+    vArr = Split(c, CMD_SEP_VALUE)
+    If UBound(vArr) = 1 Then
+      c = vArr(0)
+      v = vArr(1)
+    End If
+    Select Case c
+      Case CMD_RUN
+        DoRun = True
+      Case CMD_INDEX
+        If Not (v = "" Or Val(v) = 0) Then SharedMemOffset = CLng(v)
+    End Select
+  Next
+End Sub

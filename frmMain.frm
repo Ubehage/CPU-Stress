@@ -1,18 +1,29 @@
 VERSION 5.00
 Begin VB.Form frmMain 
    BackColor       =   &H00202020&
-   BorderStyle     =   4  'Fixed ToolWindow
+   BorderStyle     =   5  'Sizable ToolWindow
    Caption         =   "Form1"
-   ClientHeight    =   5865
-   ClientLeft      =   45
-   ClientTop       =   390
-   ClientWidth     =   10125
+   ClientHeight    =   6585
+   ClientLeft      =   120
+   ClientTop       =   465
+   ClientWidth     =   10440
    LinkTopic       =   "Form1"
    MaxButton       =   0   'False
    MinButton       =   0   'False
-   ScaleHeight     =   5865
-   ScaleWidth      =   10125
+   ScaleHeight     =   6585
+   ScaleWidth      =   10440
+   ShowInTaskbar   =   0   'False
    StartUpPosition =   3  'Windows Default
+   Begin CPU_Stress.StatusBar StatusBar 
+      Align           =   2  'Align Bottom
+      Height          =   315
+      Left            =   0
+      TabIndex        =   9
+      Top             =   6270
+      Width           =   10440
+      _ExtentX        =   18415
+      _ExtentY        =   556
+   End
    Begin CPU_Stress.Button cmdStartAll 
       Height          =   795
       Left            =   4560
@@ -88,10 +99,10 @@ Begin VB.Form frmMain
          Left            =   375
          TabIndex        =   2
          Top             =   555
-         Width           =   3135
-         _ExtentX        =   2355
+         Width           =   3255
+         _ExtentX        =   5741
          _ExtentY        =   529
-         Caption         =   "Keep this window on top"
+         Caption         =   "Keep this window on top "
       End
       Begin VB.Label lblInterval 
          AutoSize        =   -1  'True
@@ -115,13 +126,13 @@ Begin VB.Form frmMain
       End
    End
    Begin CPU_Stress.CPUView CPUView1 
-      Height          =   4545
+      Height          =   4740
       Left            =   315
       TabIndex        =   0
       Top             =   195
-      Width           =   3975
-      _ExtentX        =   7011
-      _ExtentY        =   8017
+      Width           =   4065
+      _ExtentX        =   7170
+      _ExtentY        =   8361
    End
    Begin CPU_Stress.Button cmdStopAll 
       Height          =   795
@@ -154,13 +165,15 @@ Option Explicit
 Dim LastGoodTextVal
 
 Friend Sub SetForm()
-  MoveObjects
   SetInitialValues
   Me.Caption = APP_NAME
+  WindowOnTop Me.hWnd, True
   Me.Show
 End Sub
 
 Private Sub MoveObjects()
+  On Error GoTo MoveError 'We don't check for invalid values or if the window is too small.
+                          'We just ignore any errors and move on.
   CPUView1.Move 30, 30
   chkOnTop.Move 90, (Screen.TwipsPerPixelX * 27)
   chkLiveUpdate.Move chkOnTop.Left, ((chkOnTop.Top + chkOnTop.Height) + (Screen.TwipsPerPixelX * 7))
@@ -168,9 +181,13 @@ Private Sub MoveObjects()
   lblInterval.Move chkLiveUpdate.Left, (txtInterval.Top + ((txtInterval.Height - lblInterval.Height) \ 2))
   txtInterval.Left = ((lblInterval.Left + lblInterval.Width) + (Screen.TwipsPerPixelX * 3))
   cmdInterval.Move ((txtInterval.Left + txtInterval.Width) + (Screen.TwipsPerPixelX * 5)), txtInterval.Top
-  frmOptions.Move ((CPUView1.Left + CPUView1.Width) + (Screen.TwipsPerPixelX * 5)), CPUView1.Top, (chkOnTop.Width + (chkOnTop.Left * 2)), ((cmdInterval.Top + cmdInterval.Height) + chkOnTop.Left)
-  Me.Width = ((Me.Width - Me.ScaleWidth) + ((frmOptions.Left + frmOptions.Width) + CPUView1.Left))
-  Me.Height = ((Me.Height - Me.ScaleHeight) + (CPUView1.Height + (CPUView1.Top * 2)))
+  frmOptions.Width = (chkOnTop.Width + (chkOnTop.Left * 2))
+  frmOptions.Move (Me.ScaleWidth - (frmOptions.Width + CPUView1.Left)), CPUView1.Top, frmOptions.Width, ((cmdInterval.Top + cmdInterval.Height) + chkOnTop.Left)
+  CPUView1.Width = (frmOptions.Left - (CPUView1.Left * 2))
+  CPUView1.Height = (StatusBar.Top - (CPUView1.Top + Screen.TwipsPerPixelY))
+  'frmOptions.Move ((CPUView1.Left + CPUView1.Width) + (Screen.TwipsPerPixelX * 5)), CPUView1.Top, (chkOnTop.Width + (chkOnTop.Left * 2)), ((cmdInterval.Top + cmdInterval.Height) + chkOnTop.Left)
+  'Me.Width = ((Me.Width - Me.ScaleWidth) + ((frmOptions.Left + frmOptions.Width) + CPUView1.Left))
+  'Me.Height = ((Me.Height - Me.ScaleHeight) + (CPUView1.Height + (CPUView1.Top * 2)))
   Dim t As Long, v As Long
   t = ((frmOptions.Top + frmOptions.Height) + (Screen.TwipsPerPixelY * 5))
   v = ((Me.ScaleHeight - t) - (cmdStartAll.Height * 2))
@@ -179,11 +196,16 @@ Private Sub MoveObjects()
   cmdStopAll.Top = ((cmdStartAll.Top + cmdStartAll.Height) + v)
   cmdStartAll.Left = (frmOptions.Left + ((frmOptions.Width - cmdStartAll.Width) \ 2))
   cmdStopAll.Left = cmdStartAll.Left
+  On Error GoTo 0 'Don't forget to reset the error handler.
+  Exit Sub
+MoveError:
+  Resume Next
 End Sub
 
 Private Sub SetInitialValues()
   txtInterval.Text = CStr(CPUView1.UpdateInterval)
   chkLiveUpdate.Value = IIf(CPUView1.AutoUpdate, vbChecked, vbUnchecked)
+  StatusBar.Text = ""
 End Sub
 
 Private Sub CheckIntervalText()
@@ -208,6 +230,10 @@ Private Sub cmdInterval_Click()
   If txtInterval.Text <> "" Then v = CLng(txtInterval.Text)
   If v > 0 Then CPUView1.UpdateInterval = CLng(txtInterval.Text)
   CheckIntervalText
+End Sub
+
+Private Sub Form_Resize()
+  MoveObjects
 End Sub
 
 Private Sub txtInterval_Change()
