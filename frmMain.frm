@@ -236,6 +236,10 @@ Private Sub Form_Resize()
   MoveObjects
 End Sub
 
+Private Sub Form_Unload(Cancel As Integer)
+  UnloadAll
+End Sub
+
 Private Sub txtInterval_Change()
   With txtInterval
     If (IsNumeric(.Text) = False And .Text <> "") Then

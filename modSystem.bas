@@ -33,6 +33,13 @@ Private Const ICC_NATIVEFNTCTL_CLASS  As Long = 2000
 Private Const ICC_STANDARD_CLASSES  As Long = 4000
 Private Const ICC_LINK_CLASS  As Long = 8000
 
+Global Const IDLE_PRIORITY_CLASS As Long = &H40
+Global Const BELOW_NORMAL_PRIORITY_CLASS As Long = &H4000
+Global Const NORMAL_PRIORITY_CLASS As Long = &H20
+Global Const ABOVE_NORMAL_PRIORITY_CLASS As Long = &H8000
+Global Const HIGH_PRIORITY_CLASS As Long = &H80
+Global Const REALTIME_PRIORITY_CLASS As Long = &H100
+
 Global Const HKEY_LOCAL_MACHINE = &H80000002
 Global Const KEY_READ = &H20019
 
@@ -58,7 +65,7 @@ Public Enum COMMONCONTROLS_CLASSES
 End Enum
 
 Public Type POINTAPI
-  x As Long
+  X As Long
   Y As Long
 End Type
 
@@ -86,7 +93,7 @@ Private Type SYSTEM_LOGICAL_PROCESSOR_INFORMATION
     Reserved(1) As Currency
 End Type
 
-Private Declare Function SetWindowPos Lib "user32.dll" (ByVal hWnd As Long, ByVal hWndInsertAfter As Long, ByVal x As Long, ByVal Y As Long, ByVal cX As Long, ByVal cY As Long, ByVal wFlags As Long) As Long
+Private Declare Function SetWindowPos Lib "user32.dll" (ByVal hWnd As Long, ByVal hWndInsertAfter As Long, ByVal X As Long, ByVal Y As Long, ByVal cX As Long, ByVal cY As Long, ByVal wFlags As Long) As Long
 Private Declare Sub InitCommonControls9x Lib "comctl32" Alias "InitCommonControls" ()
 Private Declare Function InitCommonControlsEx Lib "comctl32" (lpInitCtrls As tagINITCOMMONCONTROLSEX) As Boolean
 
@@ -95,15 +102,19 @@ Public Declare Function SetCapture Lib "user32" (ByVal hWnd As Long) As Long
 Public Declare Function ReleaseCapture Lib "user32" () As Long
 
 Public Declare Sub GetWindowRect Lib "user32" (ByVal hWnd As Long, ByRef WindowRect As RECT)
-Public Declare Function WindowFromPoint Lib "user32" (ByVal x As Long, ByVal Y As Long) As Long
+Public Declare Function WindowFromPoint Lib "user32" (ByVal X As Long, ByVal Y As Long) As Long
 Public Declare Function ClientToScreen Lib "user32" (ByVal hWnd As Long, lpPoint As POINTAPI) As Long
 Public Declare Function ScreenToClient Lib "user32" (ByVal hWnd As Long, ByRef lpPoint As POINTAPI) As Long
 Public Declare Function GetClientRect Lib "user32" (ByVal hWnd As Long, lpRect As RECT) As Long
 
+Private Declare Function GetCurrentProcess Lib "kernel32" () As Long
 Private Declare Function GetCurrentProcessId Lib "kernel32" () As Long
 Private Declare Function OpenProcess Lib "kernel32" (ByVal dwDesiredAccess As Long, ByVal bInheritHandle As Long, ByVal dwProcessId As Long) As Long
 Private Declare Function WaitForSingleObject Lib "kernel32" (ByVal hHandle As Long, ByVal dwMilliseconds As Long) As Long
 Public Declare Function CloseHandle Lib "kernel32" (ByVal hObject As Long) As Long
+
+Private Declare Function SetProcessAffinityMask Lib "kernel32" (ByVal hProcess As Long, ByVal dwProcessAffinityMask As Long) As Long
+Private Declare Function SetPriorityClass Lib "kernel32" (ByVal hProcess As Long, ByVal dwPriorityClass As Long) As Long
 
 Public Declare Sub ZeroMemory Lib "kernel32.dll" Alias "RtlZeroMemory" (Destination As Any, ByVal Length As Long)
 Public Declare Sub CopyMemory Lib "kernel32" Alias "RtlMoveMemory" (ByRef hpvDest As Any, ByRef hpvSource As Any, ByVal cbCopy As Long)
@@ -115,13 +126,16 @@ Public Declare Function RegCloseKey Lib "advapi32.dll" (ByVal hKey As Long) As L
 
 Private Declare Function GetLogicalProcessorInformation Lib "kernel32" (ByRef Buffer As Any, ByRef ReturnLength As Long) As Long
 
+Global CPUInfo As CPU_Info
+Global TotalCores As Long
+
 Public Function GetMypId() As Long
   GetMypId = GetCurrentProcessId()
 End Function
 
 Public Function IsProcessAlive(ProcessId As Long) As Boolean
   Dim hProc As Long, r As Long
-  If ProcessId = 0 Then Exit Function
+  If (ProcessId = 0 Or ProcessId = -1) Then Exit Function
   hProc = OpenProcess(SYNCHRONIZE, 0, ProcessId)
   If hProc = 0 Then Exit Function
   r = WaitForSingleObject(hProc, 0)
@@ -157,7 +171,7 @@ End Function
 
 Public Function IsPointInRect(pRect As RECT, pPoint As POINTAPI) As Boolean
   With pRect
-    If (pPoint.x >= .Left And pPoint.x <= .Right) Then
+    If (pPoint.X >= .Left And pPoint.X <= .Right) Then
       If (pPoint.Y >= .Top And pPoint.Y <= .Bottom) Then IsPointInRect = True
     End If
   End With
@@ -168,7 +182,7 @@ Public Function IsCursorOnWindow(hWnd As Long, Optional MouseIsDown As Boolean =
   Call GetCursorPos(mPos)
   Call GetWindowRect(hWnd, wRect)
   If IsPointInRect(wRect, mPos) = False Then If MouseIsDown = False Then Exit Function
-  hTop = WindowFromPoint(mPos.x, mPos.Y)
+  hTop = WindowFromPoint(mPos.X, mPos.Y)
   If hTop <> hWnd Then If MouseIsDown = False Then Exit Function
   IsCursorOnWindow = True
 End Function
@@ -246,3 +260,29 @@ Public Function CheckPrevInstance() As Boolean
   End If
   CheckPrevInstance = True
 End Function
+
+Public Sub LockProcessToCPU(CPUIndex As Long)
+  If (CPUIndex < 0 Or CPUIndex > (TotalCores - 1)) Then Exit Sub
+  Dim hProc As Long, cMask As Long
+  hProc = GetCurrentProcess()
+  If CPUIndex <= 30 Then
+    cMask = 2 ^ CPUIndex
+  ElseIf CPUIndex = 31 Then
+    cMask = &H80000000
+  Else
+    'Sorry, VB6 cannot go any higher
+  End If
+  Call SetProcessAffinityMask(hProc, cMask)
+End Sub
+
+Public Sub SetProcessPriority(pPriority As Long)
+  Dim hProc As Long
+  hProc = GetCurrentProcess()
+  Call SetPriorityClass(hProc, pPriority)
+End Sub
+
+Public Sub FillCPUInfo()
+  CPUInfo = GetCPUCoreCount()
+  CPUInfo.Name = GetCPUName()
+  TotalCores = CountAllCores(CPUInfo)
+End Sub

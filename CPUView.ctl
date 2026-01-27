@@ -56,20 +56,21 @@ Private Type PDH_FMT_COUNTERVALUE
 End Type
 
 Private Declare Function PdhOpenQuery Lib "pdh.dll" Alias "PdhOpenQueryA" (ByVal dataSource As String, ByVal userData As Long, query As Long) As Long
-Private Declare Function PdhAddCounter Lib "pdh.dll" Alias "PdhAddEnglishCounterA" (ByVal query As Long, ByVal counterPath As String, ByVal userData As Long, ByRef counter As Long) As Long
+Private Declare Function PdhAddCounter Lib "pdh.dll" Alias "PdhAddEnglishCounterA" (ByVal query As Long, ByVal counterPath As String, ByVal userData As Long, ByRef Counter As Long) As Long
 Private Declare Function PdhCollectQueryData Lib "pdh.dll" (ByVal query As Long) As Long
-Private Declare Function PdhGetFormattedCounterValue Lib "pdh.dll" (ByVal counter As Long, ByVal format As Long, lpdwType As Long, ByRef Value As PDH_FMT_COUNTERVALUE) As Long
+Private Declare Function PdhGetFormattedCounterValue Lib "pdh.dll" (ByVal Counter As Long, ByVal format As Long, lpdwType As Long, ByRef Value As PDH_FMT_COUNTERVALUE) As Long
 Private Declare Function PdhCloseQuery Lib "pdh.dll" (ByVal query As Long) As Long
     
 Dim m_AutoUpdate As Boolean
 Dim m_UpdateInterval As Long
 Dim m_AutoSize As CPUView_Autosize
 
-Dim CPUInfo As CPU_Info
-Dim TotalCores As Long
 Dim cpuRECTs() As RECT
 Dim CPULoad() As Double
 Dim oldCPULoad() As Double
+Dim CPUBusy() As Boolean
+
+Dim m_AliveProcesses As Long
 
 Dim ViewCols As Long
 Dim ViewRows As Long
@@ -93,6 +94,7 @@ Dim WithEvents UpdateTimer As CPUTimer
 Attribute UpdateTimer.VB_VarHelpID = -1
 
 Public Event Click(Index As Long)
+Public Event AliveProcessesChanged()
 
 Public Property Get AutoUpdate() As Boolean
   AutoUpdate = m_AutoUpdate
@@ -102,6 +104,9 @@ Public Property Get UpdateInterval() As Long
 End Property
 Public Property Get AutoSizeView() As CPUView_Autosize
   AutoSizeView = m_AutoSize
+End Property
+Public Property Get AliveProcesses() As Long
+  AliveProcesses = m_AliveProcesses
 End Property
 Public Property Let AutoUpdate(New_AutoUpdate As Boolean)
   If m_AutoUpdate = New_AutoUpdate Then Exit Property
@@ -169,7 +174,7 @@ Private Sub DrawTitle()
 End Sub
 
 Private Sub DrawCPUName()
-  Dim x As Long
+  Dim X As Long
   With UserControl.Font
     .Name = FONT_SECONDARY
     .Size = FONTSIZE_SECONDARY
@@ -193,7 +198,7 @@ Private Sub DrawCPURect(RectIndex As Long, Optional FullRedraw As Boolean = Fals
   With cpuRECTs(RectIndex)
     If FullRedraw = True Then UserControl.Line (.Left, .Top)-(.Right, .Bottom), GetCPUBackColor(RectIndex), BF
     If gHasData Then DrawCPUFlood RectIndex
-    UserControl.Line (.Left, .Top)-(.Right, .Bottom), COLOR_OUTLINE_LIGHT, B
+    UserControl.Line (.Left, .Top)-(.Right, .Bottom), GetCPUBorderColor(RectIndex), B
   End With
 End Sub
 
@@ -214,6 +219,14 @@ Private Function GetCPUFloodHeight(CPUIndex As Long) As Long
   r = ((h / 100) * CPULoad(CPUIndex - 1))
   If r > h Then r = h
   GetCPUFloodHeight = r
+End Function
+
+Private Function GetCPUBorderColor(CPUIndex As Long) As Long
+  If CPUBusy(CPUIndex) = True Then
+    GetCPUBorderColor = COLOR_TEXT
+  Else
+    GetCPUBorderColor = COLOR_OUTLINE_LIGHT
+  End If
 End Function
 
 Private Function GetCPUFloodColor(CPUIndex As Long) As Long
@@ -290,22 +303,22 @@ End Sub
 
 Private Sub SetCPURECTs()
   Dim i As Long, j As Long, c As Long
-  Dim x As Long, Y As Long, w As Long, h As Long
+  Dim X As Long, Y As Long, w As Long, h As Long
   SetRowsAndCols
   Y = ViewTop
   w = GetCPURectSize(xyX)
   h = GetCPURectSize(xyY)
   For i = 1 To ViewRows
-    x = (Screen.TwipsPerPixelX * KERNEL_PIXEL_INDENT)
+    X = (Screen.TwipsPerPixelX * KERNEL_PIXEL_INDENT)
     For j = 1 To ViewCols
       c = (c + 1)
       If c > TotalCores Then Exit Sub
       With cpuRECTs(c)
-        .Left = x
+        .Left = X
         .Top = Y
         .Right = (.Left + w)
         .Bottom = (.Top + h)
-        x = (.Right + (Screen.TwipsPerPixelX * KERNEL_PIXEL_SPACING))
+        X = (.Right + (Screen.TwipsPerPixelX * KERNEL_PIXEL_SPACING))
       End With
     Next
     Y = (cpuRECTs(c).Bottom + (Screen.TwipsPerPixelY * KERNEL_PIXEL_SPACING))
@@ -355,12 +368,11 @@ Private Sub InitCPUInfo()
 End Sub
 
 Private Sub GetCPUInfo()
-  CPUInfo = GetCPUCoreCount()
-  CPUInfo.Name = GetCPUName()
-  TotalCores = CountAllCores(CPUInfo)
+  FillCPUInfo
   ReDim cpuRECTs(1 To TotalCores) As RECT
   ReDim CPULoad(TotalCores - 1) As Double
   ReDim oldCPULoad(TotalCores - 1) As Double
+  ReDim CPUBusy(1 To TotalCores) As Boolean
 End Sub
 
 Private Function GetCPURectsTotalSize() As POINTAPI
@@ -372,14 +384,14 @@ Private Function GetCPURectsTotalSize() As POINTAPI
     End With
   Next
   With GetCPURectsTotalSize
-    .x = w
+    .X = w
     .Y = h
   End With
 End Function
 
 Private Sub SetFixedWindowSize()
   With GetCPURectsTotalSize
-    FixedWindowSize.x = (.x + (Screen.TwipsPerPixelX * KERNEL_PIXEL_SPACING))
+    FixedWindowSize.X = (.X + (Screen.TwipsPerPixelX * KERNEL_PIXEL_SPACING))
     FixedWindowSize.Y = (.Y + (Screen.TwipsPerPixelY * KERNEL_PIXEL_SPACING))
   End With
 End Sub
@@ -420,11 +432,11 @@ Private Function GetCPUIndexFromMousePos() As Long
   Dim i As Long, p As POINTAPI, r As Long
   Call GetCursorPos(p)
   Call ScreenToClient(UserControl.hWnd, p)
-  p.x = (p.x * Screen.TwipsPerPixelX)
+  p.X = (p.X * Screen.TwipsPerPixelX)
   p.Y = (p.Y * Screen.TwipsPerPixelY)
   For i = 1 To TotalCores
     With cpuRECTs(i)
-      If (p.x >= .Left And p.x <= .Right) Then
+      If (p.X >= .Left And p.X <= .Right) Then
         If (p.Y >= .Top And p.Y <= .Bottom) Then
           r = i
           Exit For
@@ -472,10 +484,34 @@ Private Sub EndCapture()
   End If
 End Sub
 
+Private Sub CheckAliveProcesses()
+  Dim i As Long, p As Long
+  For i = 1 To TotalCores
+    With SharedMemory.Instances(i)
+      If IsProcessAlive(.mProcessID) = False Then
+        ClearSharedMemoryIndex i
+        CPUBusy(i) = False
+        DrawCPURect i
+      Else
+        p = (p + 1)
+        If CPUBusy(i) = False Then
+          CPUBusy(i) = True
+          DrawCPURect i
+        End If
+      End If
+    End With
+  Next
+  If p <> m_AliveProcesses Then
+    m_AliveProcesses = p
+    RaiseEvent AliveProcessesChanged
+  End If
+End Sub
+
 Private Sub UpdateTimer_Timer()
   UpdateTimer.Enabled = False
   UpdateView
-  UpdateTimer.Enabled = True
+  CheckAliveProcesses
+  If m_AutoUpdate = True Then UpdateTimer.Enabled = True
 End Sub
 
 Private Sub UserControl_Initialize()
@@ -490,7 +526,7 @@ Private Sub UserControl_InitProperties()
   m_AutoSize = CPUView_Autosize.ViewAutoSize
 End Sub
 
-Private Sub UserControl_MouseDown(Button As Integer, Shift As Integer, x As Single, Y As Single)
+Private Sub UserControl_MouseDown(Button As Integer, Shift As Integer, X As Single, Y As Single)
   If Button = vbLeftButton Then
     If IsCursorOnWindow(UserControl.hWnd) Then
       m_MouseIsDown = True
@@ -501,13 +537,13 @@ Private Sub UserControl_MouseDown(Button As Integer, Shift As Integer, x As Sing
   End If
 End Sub
 
-Private Sub UserControl_MouseMove(Button As Integer, Shift As Integer, x As Single, Y As Single)
+Private Sub UserControl_MouseMove(Button As Integer, Shift As Integer, X As Single, Y As Single)
   StartHover
   If m_IsCapturing = False Then Exit Sub
   If IsCursorOnWindow(UserControl.hWnd, m_MouseIsDown) = False Then EndHover
 End Sub
 
-Private Sub UserControl_MouseUp(Button As Integer, Shift As Integer, x As Single, Y As Single)
+Private Sub UserControl_MouseUp(Button As Integer, Shift As Integer, X As Single, Y As Single)
   Dim HadCapture As Boolean
   If (Button = vbLeftButton And m_MouseIsDown = True) Then
     HadCapture = m_IsCapturing
@@ -531,7 +567,7 @@ End Sub
 
 Private Sub UserControl_Resize()
   If m_AutoSize = FixedSize Then
-    If UserControl.ScaleWidth <> FixedWindowSize.x Then UserControl.Width = ((UserControl.Width - UserControl.ScaleWidth) + FixedWindowSize.x): Exit Sub
+    If UserControl.ScaleWidth <> FixedWindowSize.X Then UserControl.Width = ((UserControl.Width - UserControl.ScaleWidth) + FixedWindowSize.X): Exit Sub
     If UserControl.ScaleHeight <> FixedWindowSize.Y Then UserControl.Height = ((UserControl.Height - UserControl.ScaleHeight) + FixedWindowSize.Y): Exit Sub
   ElseIf m_AutoSize = ViewAutoSize Then
     DoAutoSize

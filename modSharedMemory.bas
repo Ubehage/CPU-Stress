@@ -5,8 +5,9 @@ Global Const MEMMSG_RUNSTRESS As Long = &H5
 Global Const MEMMSG_STOPSTRESS As Long = &H7
 Global Const MEMMSG_EXIT As Long = &H11
 
-Global Const MEMSTATUS_IDLE = &HA0
-Global Const MEMSTATUS_RUNNING = &HA2
+Global Const MEMSTATUS_IDLE As Long = &HA0
+Global Const MEMSTATUS_RUNNING As Long = &HA2
+Global Const MEMSTATUS_EXITING As Long = &HA4
 
 Private Const PAGE_READWRITE As Long = &H4&
 Private Const FILE_MAP_ALL_ACCESS As Long = &HF001F
@@ -101,6 +102,17 @@ Public Function ReadFromSharedMemory(Optional ReadAllData As Boolean = False, Op
   End If
   ReadFromSharedMemory = True
 End Function
+
+Public Sub ClearSharedMemoryIndex(mOffset As Long)
+  If (mOffset < 0 Or mOffset > (TotalCores - 1)) Then Exit Sub
+  With SharedMemory.Instances(mOffset)
+    .mAssignedCore = 0
+    .mCommand = 0
+    .mProcessID = 0
+    .mStatus = 0
+  End With
+  Call WriteToSharedMemory(False, mOffset)
+End Sub
 
 Private Sub ClearSharedMemory()
   ZeroMemory SharedMemory, LenB(SharedMemory)

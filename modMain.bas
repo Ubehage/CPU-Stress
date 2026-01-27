@@ -50,10 +50,9 @@ End Enum
 Dim DoRun As Boolean
 
 Global ChangedByCode As Boolean
+Global ExitNow As Boolean
 
 Global IsRunningInIDE As Boolean
-
-Dim Stresser As StressClient
 
 Sub Main()
   Dim s As Integer
@@ -64,31 +63,35 @@ Sub Main()
   If s = 1 Then
     LoadMainForm
   ElseIf s = 2 Then
-    Set Stresser = New StressClient
-    Stresser.Start
+    FillCPUInfo
+    LoadStressForm
   End If
   SharedMemory.Instances(SharedMemOffset).mProcessID = GetMypId
   Call WriteToSharedMemory(False)
 End Sub
 
 Private Function Start() As Integer
-  If Not OpenSharedMemory() = True Then
+  If OpenSharedMemory() = False Then
     MsgBox "Could not open shared memory!" & vbCrLf & "This program cannot continue.", vbOKOnly Or vbCritical, "Error opening shared memory"
     Exit Function
   End If
   Call ReadCommandLine(Command)
+  'Call ReadCommandLine(GetNewCommandLineParameters(2))
   If DoRun = True Then
     If SharedMemOffset = 0 Then
       MsgBox "Invalid command parameters!" & vbCrLf & "This program will now exit.", vbOKOnly Or vbInformation, "Invalid command parameters"
+      Call CloseSharedMemory
       Exit Function
     End If
     Start = 2
   Else
     If SharedMemOffset <> 0 Then
       MsgBox "Invalid command parameters!" & vbCrLf & "This program will now exit.", vbOKOnly Or vbInformation, "Invalid command parameters"
+      Call CloseSharedMemory
       Exit Function
     ElseIf CheckPrevInstance() = False Then
       MsgBox "You can only run one instance of this program!", vbOKOnly Or vbInformation, APP_NAME
+      Call CloseSharedMemory
       Exit Function
     End If
     Start = 1
@@ -100,7 +103,13 @@ Private Sub LoadMainForm()
   frmMain.SetForm
 End Sub
 
+Private Sub LoadStressForm()
+  Load frmStress
+  frmStress.Start
+End Sub
+
 Public Sub UnloadAll()
+  ClearSharedMemoryIndex SharedMemOffset
   Call CloseSharedMemory
 End Sub
 
@@ -136,3 +145,19 @@ Private Sub ReadCommandLine(CommandLine As String)
     End Select
   Next
 End Sub
+
+Private Function GetAppFile() As String
+  Dim p As String
+  p = App.Path
+  If Right$(p, 1) <> "\" Then p = p & "\"
+  GetAppFile = p & App.EXEName & ".exe"
+End Function
+
+Private Function GetNewCommandLine(CPUIndex As Long) As String
+  GetNewCommandLine = """" & GetAppFile & """ " & GetNewCommandLineParameters(CPUIndex)
+End Function
+
+Private Function GetNewCommandLineParameters(CPUIndex As Long) As String
+  GetNewCommandLineParameters = CMD_RUN & CMD_SEP_COMMAND & _
+                                CMD_INDEX & CMD_SEP_VALUE & CStr(CPUIndex)
+End Function

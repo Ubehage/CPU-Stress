@@ -3,27 +3,27 @@
 Status: WIP · Experimental
 
 A minimal, focused CPU stress & control tool with a compact UI that lets the user control every logical execution unit (kernel) individually.
-The architecture and design will mirror my MemEater project where it makes sense: Minimal runtime dependencies, explicit user control, predictable behavior, and telemetry for safety.
 
-This repository is in early development.
-The UI is fully functional, but all the core functions for stressing the cpu is not yet implemented.
+This repository is in development.
+The UI is fully functional.
 
 ---
 
-
 ## Current status
-- Visual view of the processor cores.
-- Live update of the cpu's workload.
-- Customizable delay between updates.
-- No stress-generation code implemented yet.
-
+- UI almost functional.
+  - Visual view of the processor cores.
+  - Live update of the cpu's workload.
+  - Customizable delay between updates.
+  - Resizable window. The controls move automatically and maintain proportions.
+- Fully function CPU-killer stress function implemented.
+  - No functions to start the processes has been implemented yet.
+  
 ## Vision
 - A compact, responsive CPU-stress application with a minimalistic GUI that exposes:
   - Per-core and per-kernel control (start/stop stress test).
   - User-configurable profiles (safe, test, destructive) and a visible kill-switch.
   - No built-in safeguards. My vision is to make this tool a cpu-killer, and give the user full control and responsibility.
   - No external dependencies - fully portable executable.
-- Follow the same architectural design principles used in MemEater: multi processes, communicating via shared memory.
 
 ## Safety & usage guidance
 - This project will include code that intentionally overloads CPUs. Do NOT run stress features on hardware you do not own or in production environments.
