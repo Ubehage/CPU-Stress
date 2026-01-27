@@ -1,6 +1,8 @@
 Attribute VB_Name = "modMain"
 Option Explicit
 
+Global Const APP_NAME As String = "Ubehage's CPU-Stress Tool (Work-in-Progress)"
+
 Global Const FONT_MAIN As String = "Segoe UI"
 Global Const FONT_SECONDARY As String = "Consolas"
 Global Const FONTSIZE_MAIN As Integer = 11
@@ -34,6 +36,13 @@ Global Const COLOR_RED_PRESSED As Long = 3223992
 Global Const COLOR_RED_DISABLED As Long = 6776730
 Global Const COLOR_OUTLINE As Long = 3815994
 Global Const COLOR_OUTLINE_LIGHT As Long = 7368816
+
+Public Enum XorY_Enum
+  xyX = &H1
+  xyY = &H2
+End Enum
+
+Global ChangedByCode As Boolean
 
 Global IsRunningInIDE As Boolean
 

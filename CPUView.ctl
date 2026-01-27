@@ -35,11 +35,19 @@ Private Const CPU_UPDATE_INTERVAL As Long = 1000
 
 Private Const CPUVIEW_TITLE As String = "CPU Overview"
 
+Private Const TOP_INDENT As Long = 23
 Private Const KERNEL_PIXEL_WIDTH As Long = 20
 Private Const KERNEL_PIXEL_HEIGHT As Long = 40
 Private Const KERNEL_PIXEL_SPACING As Long = 7
+Private Const KERNEL_PIXEL_INDENT = 5
 
 Private Const PDH_FMT_DOUBLE As Long = &H200
+
+Public Enum CPUView_Autosize
+  NoAutoSize = &H0
+  FixedSize = &H1
+  ViewAutoSize = &H2
+End Enum
 
 Private Type PDH_FMT_COUNTERVALUE
   CStatus As Long
@@ -50,18 +58,21 @@ End Type
 Private Declare Function PdhOpenQuery Lib "pdh.dll" Alias "PdhOpenQueryA" (ByVal dataSource As String, ByVal userData As Long, query As Long) As Long
 Private Declare Function PdhAddCounter Lib "pdh.dll" Alias "PdhAddEnglishCounterA" (ByVal query As Long, ByVal counterPath As String, ByVal userData As Long, ByRef counter As Long) As Long
 Private Declare Function PdhCollectQueryData Lib "pdh.dll" (ByVal query As Long) As Long
-Private Declare Function PdhGetFormattedCounterValue Lib "pdh.dll" (ByVal counter As Long, ByVal format As Long, lpdwType As Long, ByRef value As PDH_FMT_COUNTERVALUE) As Long
+Private Declare Function PdhGetFormattedCounterValue Lib "pdh.dll" (ByVal counter As Long, ByVal format As Long, lpdwType As Long, ByRef Value As PDH_FMT_COUNTERVALUE) As Long
 Private Declare Function PdhCloseQuery Lib "pdh.dll" (ByVal query As Long) As Long
     
 Dim m_AutoUpdate As Boolean
 Dim m_UpdateInterval As Long
-Dim m_AutoSize As Boolean
+Dim m_AutoSize As CPUView_Autosize
 
 Dim CPUInfo As CPU_Info
 Dim TotalCores As Long
 Dim cpuRECTs() As RECT
 Dim CPULoad() As Double
 Dim oldCPULoad() As Double
+
+Dim ViewCols As Long
+Dim ViewRows As Long
 
 Dim m_IsCapturing As Boolean
 Dim m_IsHovering As Boolean
@@ -88,23 +99,26 @@ End Property
 Public Property Get UpdateInterval() As Long
   UpdateInterval = m_UpdateInterval
 End Property
-Public Property Get AutoSize() As Boolean
-  AutoSize = m_AutoSize
+Public Property Get AutoSizeView() As CPUView_Autosize
+  AutoSizeView = m_AutoSize
 End Property
 Public Property Let AutoUpdate(New_AutoUpdate As Boolean)
   If m_AutoUpdate = New_AutoUpdate Then Exit Property
   m_AutoUpdate = New_AutoUpdate
+  UserControl.PropertyChanged PROPNAME_AUTOUPDATE
   ShiftAutoUpdate
 End Property
 Public Property Let UpdateInterval(New_UpdateInterval As Long)
   If (m_UpdateInterval = New_UpdateInterval Or New_UpdateInterval = 0) Then Exit Property
   m_UpdateInterval = New_UpdateInterval
+  UserControl.PropertyChanged PROPNAME_UPDATEINTERVAL
   If Not UpdateTimer Is Nothing Then UpdateTimer.Interval = m_UpdateInterval
 End Property
-Public Property Let AutoSize(New_AutoSize As Boolean)
+Public Property Let AutoSizeView(New_AutoSize As CPUView_Autosize)
   If m_AutoSize = New_AutoSize Then Exit Property
   m_AutoSize = New_AutoSize
-  If m_AutoSize = True Then UserControl_Resize
+  UserControl.PropertyChanged PROPNAME_AUTOSIZE
+  DoAutoSize
 End Property
 
 Public Sub Refresh(Optional FullRefresh As Boolean = False)
@@ -172,10 +186,13 @@ Private Sub DrawCPUFlood(CPUIndex As Long)
 End Sub
 
 Private Function GetCPUFloodHeight(CPUIndex As Long) As Long
-  Dim r As Long
-  r = ((KERNEL_PIXEL_HEIGHT / 100) * CPULoad(CPUIndex - 1))
-  If r > KERNEL_PIXEL_HEIGHT Then r = KERNEL_PIXEL_HEIGHT
-  GetCPUFloodHeight = (r * Screen.TwipsPerPixelY)
+  Dim h As Long, r As Long
+  With cpuRECTs(CPUIndex)
+    h = (.Bottom - .Top)
+  End With
+  r = ((h / 100) * CPULoad(CPUIndex - 1))
+  If r > h Then r = h
+  GetCPUFloodHeight = r
 End Function
 
 Private Function GetCPUFloodColor(CPUIndex As Long) As Long
@@ -190,7 +207,7 @@ Private Function GetCPUFloodColor(CPUIndex As Long) As Long
     End If
   End If
   Select Case CPULoad(CPUIndex - 1)
-    Case Is >= 85
+    Case Is >= 90
       If cClick = True Then
         GetCPUFloodColor = COLOR_RED_PRESSED
       ElseIf cHov = True Then
@@ -198,7 +215,7 @@ Private Function GetCPUFloodColor(CPUIndex As Long) As Long
       Else
         GetCPUFloodColor = COLOR_RED
       End If
-    Case Is >= 60
+    Case Is >= 70
       If cClick = True Then
         GetCPUFloodColor = COLOR_YELLOW_PRESSED
       ElseIf cHov = True Then
@@ -252,25 +269,14 @@ End Sub
 
 Private Sub SetCPURECTs()
   Dim i As Long, j As Long, c As Long
-  Dim cCols As Long, cRows As Long, tC As Long, tR As Long
   Dim X As Long, Y As Long, w As Long, h As Long
-  cCols = TotalCores
-  cRows = 1
-  Do
-    tC = (cCols / 2)
-    tR = (cRows * 2)
-    If tR > tC Then Exit Do
-    cCols = tC
-    cRows = tR
-  Loop
-  tC = (cCols * cRows)
-  If tC < TotalCores Then cCols = (cCols + 1)
-  Y = (Screen.TwipsPerPixelY * 23)
-  w = (Screen.TwipsPerPixelX * KERNEL_PIXEL_WIDTH)
-  h = (Screen.TwipsPerPixelX * KERNEL_PIXEL_HEIGHT)
-  For i = 1 To cRows
-    X = (Screen.TwipsPerPixelX * 5)
-    For j = 1 To cCols
+  SetRowsAndCols
+  Y = (Screen.TwipsPerPixelY * TOP_INDENT)
+  w = GetCPURectSize(xyX)
+  h = GetCPURectSize(xyY)
+  For i = 1 To ViewRows
+    X = (Screen.TwipsPerPixelX * KERNEL_PIXEL_INDENT)
+    For j = 1 To ViewCols
       c = (c + 1)
       If c > TotalCores Then Exit Sub
       With cpuRECTs(c)
@@ -285,6 +291,42 @@ Private Sub SetCPURECTs()
   Next
 End Sub
 
+Private Sub SetRowsAndCols()
+  Dim tCols As Long, tRows As Long
+  ViewCols = TotalCores
+  ViewRows = 1
+  Do
+    tCols = (ViewCols / 2)
+    tRows = (ViewRows * 2)
+    If tRows > tCols Then Exit Do
+    ViewCols = tCols
+    ViewRows = tRows
+  Loop
+  tCols = (ViewCols * ViewRows)
+  If tCols < TotalCores Then ViewCols = (ViewCols + 1)
+End Sub
+
+Private Function GetCPURectSize(XorY As XorY_Enum) As Long
+  If (m_AutoSize = NoAutoSize Or m_AutoSize = FixedSize) Then
+    If XorY = xyX Then
+      GetCPURectSize = (Screen.TwipsPerPixelX * KERNEL_PIXEL_WIDTH)
+    Else
+      GetCPURectSize = (Screen.TwipsPerPixelY * KERNEL_PIXEL_HEIGHT)
+    End If
+  ElseIf m_AutoSize = ViewAutoSize Then
+    Dim t As Long
+    If XorY = xyX Then
+      t = (UserControl.ScaleWidth - (Screen.TwipsPerPixelX * (KERNEL_PIXEL_INDENT * 2)))
+      t = (t - (Screen.TwipsPerPixelX * (KERNEL_PIXEL_SPACING * (ViewCols - 1))))
+      GetCPURectSize = (t / ViewCols)
+    ElseIf XorY = xyY Then
+      t = (UserControl.ScaleHeight - (Screen.TwipsPerPixelY * (KERNEL_PIXEL_INDENT + TOP_INDENT)))
+      t = (t - (Screen.TwipsPerPixelY * (KERNEL_PIXEL_SPACING * (ViewRows - 1))))
+      GetCPURectSize = (t / ViewRows)
+    End If
+  End If
+End Function
+
 Private Sub InitCPUInfo()
   GetCPUInfo
   SetCPURECTs
@@ -298,7 +340,7 @@ Private Sub GetCPUInfo()
   ReDim oldCPULoad(TotalCores - 1) As Double
 End Sub
 
-Private Function GetCPURectSize() As POINTAPI
+Private Function GetCPURectsTotalSize() As POINTAPI
   Dim i As Long, w As Long, h As Long
   For i = 1 To TotalCores
     With cpuRECTs(i)
@@ -306,17 +348,27 @@ Private Function GetCPURectSize() As POINTAPI
       If .Bottom > h Then h = .Bottom
     End With
   Next
-  With GetCPURectSize
+  With GetCPURectsTotalSize
     .X = w
     .Y = h
   End With
 End Function
 
 Private Sub SetFixedWindowSize()
-  With GetCPURectSize
+  With GetCPURectsTotalSize
     FixedWindowSize.X = (.X + (Screen.TwipsPerPixelX * KERNEL_PIXEL_SPACING))
     FixedWindowSize.Y = (.Y + (Screen.TwipsPerPixelY * KERNEL_PIXEL_SPACING))
   End With
+End Sub
+
+Private Sub DoAutoSize()
+  SetCPURECTs
+  If m_AutoSize = FixedSize Then
+    SetFixedWindowSize
+    UserControl_Resize
+  ElseIf m_AutoSize = ViewAutoSize Then
+    Refresh True
+  End If
 End Sub
 
 Private Sub ShiftAutoUpdate()
@@ -412,7 +464,7 @@ End Sub
 Private Sub UserControl_InitProperties()
   m_AutoUpdate = False
   m_UpdateInterval = CPU_UPDATE_INTERVAL
-  m_AutoSize = True
+  m_AutoSize = CPUView_Autosize.ViewAutoSize
 End Sub
 
 Private Sub UserControl_MouseDown(Button As Integer, Shift As Integer, X As Single, Y As Single)
@@ -450,13 +502,16 @@ End Sub
 Private Sub UserControl_ReadProperties(PropBag As PropertyBag)
   m_AutoUpdate = PropBag.ReadProperty(PROPNAME_AUTOUPDATE, False)
   m_UpdateInterval = PropBag.ReadProperty(PROPNAME_UPDATEINTERVAL, CPU_UPDATE_INTERVAL)
-  m_AutoSize = PropBag.ReadProperty(PROPNAME_AUTOSIZE, True)
+  m_AutoSize = PropBag.ReadProperty(PROPNAME_AUTOSIZE, CPUView_Autosize.ViewAutoSize)
+  DoAutoSize
 End Sub
 
 Private Sub UserControl_Resize()
-  If m_AutoSize = True Then
+  If m_AutoSize = FixedSize Then
     If UserControl.ScaleWidth <> FixedWindowSize.X Then UserControl.Width = ((UserControl.Width - UserControl.ScaleWidth) + FixedWindowSize.X): Exit Sub
     If UserControl.ScaleHeight <> FixedWindowSize.Y Then UserControl.Height = ((UserControl.Height - UserControl.ScaleHeight) + FixedWindowSize.Y): Exit Sub
+  ElseIf m_AutoSize = ViewAutoSize Then
+    DoAutoSize
   End If
   Refresh True
 End Sub
@@ -470,5 +525,5 @@ End Sub
 Private Sub UserControl_WriteProperties(PropBag As PropertyBag)
   PropBag.WriteProperty PROPNAME_AUTOUPDATE, m_AutoUpdate, False
   PropBag.WriteProperty PROPNAME_UPDATEINTERVAL, m_UpdateInterval, CPU_UPDATE_INTERVAL
-  PropBag.WriteProperty PROPNAME_AUTOSIZE, m_AutoSize, True
+  PropBag.WriteProperty PROPNAME_AUTOSIZE, m_AutoSize, CPUView_Autosize.ViewAutoSize
 End Sub
