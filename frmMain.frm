@@ -207,7 +207,7 @@ Private Sub MoveObjects()
   CPUView1.Height = (Status1.Top - (CPUView1.Top + Screen.TwipsPerPixelY))
   Dim t As Long, v As Long
   t = ((frmOptions.Top + frmOptions.Height) + (Screen.TwipsPerPixelY * 5))
-  v = ((Me.ScaleHeight - t) - (cmdStartAll.Height * 2))
+  v = ((Status1.Top - t) - (cmdStartAll.Height * 2))
   v = (v \ 3)
   cmdStartAll.Top = (t + v)
   cmdStopAll.Top = ((cmdStartAll.Top + cmdStartAll.Height) + v)
