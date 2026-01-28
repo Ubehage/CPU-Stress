@@ -82,6 +82,7 @@ Dim m_MouseIsDown As Boolean
 Dim m_PressedIndex As Long
 
 Dim FixedWindowSize As POINTAPI
+Dim LoadTextSize As Long
 
 Dim gQuery As Long
 Dim gCounters() As Long
@@ -164,12 +165,8 @@ Private Sub DrawBorder()
 End Sub
 
 Private Sub DrawTitle()
+  SetControlFont True, , True
   With UserControl
-    With .Font
-      .Name = FONT_MAIN
-      .Size = FONTSIZE_MAIN
-      .Bold = True
-    End With
     .CurrentX = (Screen.TwipsPerPixelX * 10)
     .CurrentY = Screen.TwipsPerPixelY
   End With
@@ -179,13 +176,11 @@ End Sub
 
 Private Sub DrawCPUName()
   Dim X As Long
-  With UserControl.Font
-    .Name = FONT_SECONDARY
-    .Size = FONTSIZE_SECONDARY
-    .Bold = True
+  SetControlFont , True, True
+  With UserControl
+    .CurrentX = ((UserControl.ScaleWidth - UserControl.TextWidth(CPUInfo.Name)) \ 2)
+    .CurrentY = ViewTop
   End With
-  UserControl.CurrentX = ((UserControl.ScaleWidth - UserControl.TextWidth(CPUInfo.Name)) \ 2)
-  UserControl.CurrentY = ViewTop
   UserControl.Print CPUInfo.Name
   ViewTop = (UserControl.CurrentY + Screen.TwipsPerPixelY)
 End Sub
@@ -202,6 +197,7 @@ Private Sub DrawCPURect(RectIndex As Long, Optional FullRedraw As Boolean = Fals
   With cpuRECTs(RectIndex)
     If FullRedraw = True Then UserControl.Line (.Left, .Top)-(.Right, .Bottom), GetCPUBackColor(RectIndex), BF
     If gHasData Then DrawCPUFlood RectIndex
+    If m_AutoUpdate = True Then DrawCPULoadText RectIndex
     UserControl.Line (.Left, .Top)-(.Right, .Bottom), GetCPUBorderColor(RectIndex), B
   End With
 End Sub
@@ -213,6 +209,19 @@ Private Sub DrawCPUFlood(CPUIndex As Long)
   With cpuRECTs(CPUIndex)
     UserControl.Line (.Left, (.Bottom - h))-(.Right, .Bottom), GetCPUFloodColor(CPUIndex), BF
   End With
+End Sub
+
+Private Sub DrawCPULoadText(CPUIndex As Long)
+  Dim t As String
+  If LoadTextSize = 0 Then Exit Sub
+  t = CStr(Int(CPULoad(CPUIndex - 1)) & "%")
+  SetControlFont , True
+  UserControl.ForeColor = COLOR_TEXT
+  With cpuRECTs(CPUIndex)
+    UserControl.CurrentX = (.Left + (((.Right - .Left) - UserControl.TextWidth(t)) \ 2))
+    UserControl.CurrentY = (.Bottom - (UserControl.TextHeight(t) + (Screen.TwipsPerPixelY * 2)))
+  End With
+  UserControl.Print t
 End Sub
 
 Private Function GetCPUFloodHeight(CPUIndex As Long) As Long
@@ -284,6 +293,20 @@ Private Function GetCPUBackColor(CPUIndex As Long) As Long
   End If
 End Function
 
+Private Sub SetControlFont(Optional MainFont As Boolean = False, Optional SecondaryFont As Boolean = False, Optional BoldFont As Boolean = False)
+  With UserControl.Font
+    If MainFont = True Then
+      .Name = FONT_MAIN
+      .Size = FONTSIZE_MAIN
+    End If
+    If SecondaryFont = True Then
+      .Name = FONT_SECONDARY
+      .Size = FONTSIZE_SECONDARY
+    End If
+    .Bold = BoldFont
+  End With
+End Sub
+
 Private Sub GetCPULoads()
   Dim i As Long, v As PDH_FMT_COUNTERVALUE
   If gOpen = False Then
@@ -327,6 +350,7 @@ Private Sub SetCPURECTs()
     Next
     Y = (cpuRECTs(c).Bottom + (Screen.TwipsPerPixelY * KERNEL_PIXEL_SPACING))
   Next
+  SetCPUTextSize
 End Sub
 
 Private Sub SetRowsAndCols()
@@ -364,6 +388,33 @@ Private Function GetCPURectSize(XorY As XorY_Enum) As Long
     End If
   End If
 End Function
+
+Private Sub SetCPUTextSize()
+  Dim sMin As Long, sMax As Long, sVal As Long
+  Dim tW As Long, tH As Long, rW As Long, rH As Long
+  LoadTextSize = 0
+  With cpuRECTs(1)
+    rW = ((.Right - .Left) - (Screen.TwipsPerPixelX * 4))
+    rH = ((.Bottom - .Top) - (Screen.TwipsPerPixelY * 4))
+  End With
+  If (rW <= 60 Or rH <= 60) Then
+    Exit Sub
+  End If
+  sMax = 120
+  sMin = 1
+  Do While sMin <= sMax
+    sVal = (sMin + sMax) \ 2
+    UserControl.Font.Size = sVal
+    tW = UserControl.TextWidth("100%")
+    tH = UserControl.TextHeight("100%")
+    If (rW <= rW And tH <= rH) Then
+      LoadTextSize = sVal
+      sMin = (sVal + 1)
+    Else
+      sMax = (sVal - 1)
+    End If
+  Loop
+End Sub
 
 Private Sub InitCPUInfo()
   GetCPUInfo

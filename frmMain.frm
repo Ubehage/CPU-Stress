@@ -185,7 +185,7 @@ Attribute StatusTimer.VB_VarHelpID = -1
 
 Friend Sub SetForm()
   SetInitialValues
-  Me.Caption = APP_NAME
+  Me.Caption = GetApplicationName
   Me.Show
   SetStatusTimer
   SetProcessPriority NORMAL_PRIORITY_CLASS

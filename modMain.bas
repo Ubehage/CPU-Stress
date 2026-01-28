@@ -6,7 +6,7 @@ Private Const CMD_SEP_VALUE As String = ":"
 Private Const CMD_RUN As String = "uigbfhs"
 Private Const CMD_INDEX As String = "uygbrf"
 
-Global Const APP_NAME As String = "Ubehage's CPU-Stress Tool (v1)"
+Global Const APP_NAME As String = "Ubehage's CPU-Stress Tool (v%vma.%vmi.%vre)"
 
 Global Const FONT_MAIN As String = "Segoe UI"
 Global Const FONT_SECONDARY As String = "Consolas"
@@ -89,7 +89,7 @@ Private Function Start() As Integer
       UnloadAll
       Exit Function
     ElseIf CheckPrevInstance() = False Then
-      MsgBox "You can only run one instance of this program!", vbOKOnly Or vbInformation, APP_NAME
+      MsgBox "You can only run one instance of this program!", vbOKOnly Or vbInformation, GetApplicationName
       UnloadAll
       Exit Function
     End If
@@ -178,7 +178,7 @@ ExitLaunch:
   On Error GoTo 0
   Exit Sub
 ShellError:
-  Select Case MsgBox("There was an error trying to launch a new process." & vbCrLf & Error, vbRetryCancel Or vbCritical, "Error - " & APP_NAME)
+  Select Case MsgBox("There was an error trying to launch a new process." & vbCrLf & Error, vbRetryCancel Or vbCritical, "Error - " & GetApplicationName)
     Case vbRetry
       Resume
     Case Else
@@ -196,4 +196,8 @@ Public Function GetNextAvailableIndex() As Long
       End If
     End With
   Next
+End Function
+
+Public Function GetApplicationName() As String
+  GetApplicationName = Replace$(Replace$(Replace$(APP_NAME, "%vma", CStr(App.Major)), "%vmi", CStr(App.Minor)), "%vre", CStr(App.Revision))
 End Function

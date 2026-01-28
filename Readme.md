@@ -1,4 +1,4 @@
-# CPU-Stress Tool (Final release v1)
+# CPU-Stress Tool (1.0.1)
 
 A minimal, deterministic CPU stress and control tool with per-core precision.
 
