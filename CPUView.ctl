@@ -321,11 +321,18 @@ Private Sub GetCPULoads()
   If gHasData = False Then
     gHasData = True
   Else
-    For i = 0 To (TotalCores - 1)
+    For i = LBound(gCounters) To UBound(gCounters)
       Call PdhGetFormattedCounterValue(gCounters(i), PDH_FMT_DOUBLE, 0, v)
       If v.CStatus = 0 Then CPULoad(i) = CSng(v.DoubleValue)
     Next
   End If
+End Sub
+
+Private Sub ClearCPULoads()
+  Dim i As Long
+  For i = LBound(CPULoad) To UBound(CPULoad)
+    CPULoad(i) = 0
+  Next
 End Sub
 
 Private Sub SetCPURECTs()
@@ -462,6 +469,7 @@ End Sub
 
 Private Sub ShiftAutoUpdate()
   gHasData = False
+  ClearCPULoads
   If m_AutoUpdate = True Then
     StartUpdateTimer
   Else
