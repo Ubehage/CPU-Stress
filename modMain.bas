@@ -6,6 +6,16 @@ Private Const CMD_SEP_VALUE As String = ":"
 Private Const CMD_RUN As String = "uigbfhs"
 Private Const CMD_INDEX As String = "uygbrf"
 
+Global Const SETTINGS_APPNAME As String = "UbesCPUStress"
+Global Const SETTINGS_SECTION As String = "Settings"
+Global Const SETTINGS_ONTOP As String = "OnTop"
+Global Const SETTINGS_LIVEUPDATE As String = "LiveUpdate"
+Global Const SETTINGS_UPDATEINTERVAL As String = "UpdateInterval"
+Global Const SETTINGS_LEFT As String = "WindowLeft"
+Global Const SETTINGS_TOP As String = "WindowTop"
+Global Const SETTINGS_WIDTH As String = "WindowWidth"
+Global Const SETTINGS_HEIGHT As String = "WindowHeight"
+
 Global Const APP_NAME As String = "Ubehage's CPU-Stress Tool (v%vma.%vmi.%vre)"
 
 Global Const FONT_MAIN As String = "Segoe UI"
@@ -201,3 +211,7 @@ End Function
 Public Function GetApplicationName() As String
   GetApplicationName = Replace$(Replace$(Replace$(APP_NAME, "%vma", CStr(App.Major)), "%vmi", CStr(App.Minor)), "%vre", CStr(App.Revision))
 End Function
+
+Private Sub DeleteSavedSettings()
+  DeleteSetting SETTINGS_APPNAME
+End Sub

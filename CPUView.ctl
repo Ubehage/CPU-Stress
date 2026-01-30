@@ -615,8 +615,10 @@ End Sub
 
 Private Sub UserControl_Terminate()
   KillUpdateTimer
-  Call PdhCloseQuery(gQuery)
-  gOpen = False
+  If gOpen = True Then
+    Call PdhCloseQuery(gQuery)
+    gOpen = False
+  End If
 End Sub
 
 Private Sub UserControl_WriteProperties(PropBag As PropertyBag)

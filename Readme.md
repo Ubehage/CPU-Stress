@@ -1,10 +1,10 @@
-# CPU-Stress Tool (1.0.1)
+# CPU-Stress Tool (1.0.2)
 
-A minimal, deterministic CPU stress and control tool with per-core precision.
-
-The application allows explicit control over each logical processor using isolated worker processes, providing predictable load behavior and a responsive UI even under full system stress.
-
+A small and portable CPU stress tool with full user-control over each logical processor.
 ---
+
+Recent changes:
+Rewrote the stress-algorithm to generate more heat.
 
 ## Features
 - Per-core CPU stress control (one process per logical core)

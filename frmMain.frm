@@ -164,16 +164,6 @@ Option Explicit
 
 Private Const STATUS_TEXT As String = "%p% active processes."
 
-Private Const SETTINGS_APPNAME As String = "UbesCPUStress"
-Private Const SETTINGS_SECTION As String = "Settings"
-Private Const SETTINGS_ONTOP As String = "OnTop"
-Private Const SETTINGS_LIVEUPDATE As String = "LiveUpdate"
-Private Const SETTINGS_UPDATEINTERVAL As String = "UpdateInterval"
-Private Const SETTINGS_LEFT As String = "WindowLeft"
-Private Const SETTINGS_TOP As String = "WindowTop"
-Private Const SETTINGS_WIDTH As String = "WindowWidth"
-Private Const SETTINGS_HEIGHT As String = "WindowHeight"
-
 Dim o_OnTop As Boolean
 Dim o_LiveUpdate As Boolean
 Dim o_UpdateInterval As Long
@@ -234,15 +224,11 @@ Private Sub LoadUISettings()
   o_LiveUpdate = GetSetting(SETTINGS_APPNAME, SETTINGS_SECTION, SETTINGS_LIVEUPDATE, True)
   o_UpdateInterval = GetSetting(SETTINGS_APPNAME, SETTINGS_SECTION, SETTINGS_UPDATEINTERVAL, 1000)
   With tRect
-    .Left = GetSetting(SETTINGS_APPNAME, SETTINGS_SECTION, SETTINGS_LEFT, 0)
-    .Top = GetSetting(SETTINGS_APPNAME, SETTINGS_SECTION, SETTINGS_TOP, 0)
-    .Right = GetSetting(SETTINGS_APPNAME, SETTINGS_SECTION, SETTINGS_WIDTH, 0)
-    .Bottom = GetSetting(SETTINGS_APPNAME, SETTINGS_SECTION, SETTINGS_HEIGHT, 0)
-    If (.Left <> 0 And .Top <> 0) Then
-      If (.Right <> 0 And .Bottom <> 0) Then
-        Me.Move .Left, .Top, .Right, .Bottom
-      End If
-    End If
+    .Left = GetSetting(SETTINGS_APPNAME, SETTINGS_SECTION, SETTINGS_LEFT, Me.Left)
+    .Top = GetSetting(SETTINGS_APPNAME, SETTINGS_SECTION, SETTINGS_TOP, Me.Top)
+    .Right = GetSetting(SETTINGS_APPNAME, SETTINGS_SECTION, SETTINGS_WIDTH, Me.Width)
+    .Bottom = GetSetting(SETTINGS_APPNAME, SETTINGS_SECTION, SETTINGS_HEIGHT, Me.Height)
+    Me.Move .Left, .Top, .Right, .Bottom
   End With
 End Sub
 
@@ -397,8 +383,8 @@ End Sub
 
 Private Sub Form_Unload(Cancel As Integer)
   KillStatusTimer
-  ClearSharedMemoryIndex SharedMemOffset
   CloseAllStressers
+  ClearSharedMemoryIndex SharedMemOffset
   SaveUISettings
   UnloadAll
 End Sub
