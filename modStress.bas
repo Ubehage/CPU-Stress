@@ -4,6 +4,8 @@ Option Explicit
 Private Const LOOP_SIZE   As Long = 100000
 Private Const LOOP_COUNT As Long = 100
 
+Private Declare Sub Sleep Lib "kernel32" (ByVal dwMilliseconds As Long)
+
 Public Sub StressLoop()
   Dim a As Double, b As Double, c As Double
   Dim v1 As Double, v2 As Double
@@ -22,6 +24,6 @@ Public Sub StressLoop()
       a = (a + (a * v2))
       Counter = Counter + 1
     Loop Until Counter >= LOOP_SIZE
-    DoEvents
+    Call Sleep(0)
   Next
 End Sub
