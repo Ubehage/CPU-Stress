@@ -178,7 +178,7 @@ Friend Sub SetForm()
   Me.Caption = GetApplicationName
   Me.Show
   SetStatusTimer
-  SetProcessPriority NORMAL_PRIORITY_CLASS
+  SetProcessPriority ABOVE_NORMAL_PRIORITY_CLASS
 End Sub
 
 Private Sub MoveObjects()
