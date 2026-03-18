@@ -30,7 +30,7 @@ Dim ExitStressLoop As Boolean
 
 Public Sub Start()
   LockProcessToCPU (SharedMemOffset - 1)
-  SetProcessPriority BELOW_NORMAL_PRIORITY_CLASS
+  SetProcessPriority HIGH_PRIORITY_CLASS
   StartIdleTimer
 End Sub
 
@@ -52,6 +52,10 @@ Private Sub RunStressTest()
   Do
     StressLoop
     CheckAppMessage
+    If IsProcessAlive(SharedMemory.Instances(0).mProcessID) = False Then
+      ExitNow = True
+      ExitStressLoop = True
+    End If
   Loop Until ExitStressLoop = True
   InStressLoop = False
   ExitStressLoop = False
