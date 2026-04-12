@@ -59,7 +59,7 @@ Private Function GetOptimizedStressAssembly() As String
       'push ebx
       'push edi
       'mov edi, [ebp+16]
-      'mox eax, 1
+      'mov eax, 1
       'cvtsi2sd xmm1, eax
       'movaps xmm0, xmm1
       'movaps xmm2, xmm1
@@ -95,7 +95,7 @@ Private Function GetOptimizedStressAssembly() As String
       'push ebx
       'push edi
       'mov edi, [ebp+16]
-      'mox eax, 1
+      'mov eax, 1
       'cvtsi2sd xmm1, eax
       'movaps xmm0, xmm1
       'mulps xmm0, xmm0
