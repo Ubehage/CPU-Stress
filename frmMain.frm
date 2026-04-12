@@ -6,13 +6,13 @@ Begin VB.Form frmMain
    ClientHeight    =   5865
    ClientLeft      =   120
    ClientTop       =   465
-   ClientWidth     =   9060
+   ClientWidth     =   9510
    Icon            =   "frmMain.frx":0000
    LinkTopic       =   "Form1"
    MaxButton       =   0   'False
    MinButton       =   0   'False
    ScaleHeight     =   5865
-   ScaleWidth      =   9060
+   ScaleWidth      =   9510
    StartUpPosition =   3  'Windows Default
    Begin CPU_Stress.StatusBar Status1 
       Align           =   2  'Align Bottom
@@ -20,15 +20,15 @@ Begin VB.Form frmMain
       Left            =   0
       TabIndex        =   9
       Top             =   5550
-      Width           =   9060
-      _ExtentX        =   15981
+      Width           =   9510
+      _ExtentX        =   16775
       _ExtentY        =   556
    End
    Begin CPU_Stress.Button cmdStartAll 
       Height          =   795
-      Left            =   4560
+      Left            =   4935
       TabIndex        =   7
-      Top             =   2850
+      Top             =   2835
       Width           =   2700
       _ExtentX        =   4763
       _ExtentY        =   1402
@@ -130,15 +130,15 @@ Begin VB.Form frmMain
       Left            =   315
       TabIndex        =   0
       Top             =   195
-      Width           =   4065
-      _ExtentX        =   7170
+      Width           =   4200
+      _ExtentX        =   7408
       _ExtentY        =   8361
    End
    Begin CPU_Stress.Button cmdStopAll 
       Height          =   795
-      Left            =   4605
+      Left            =   5130
       TabIndex        =   8
-      Top             =   4170
+      Top             =   4185
       Width           =   2700
       _ExtentX        =   4763
       _ExtentY        =   1402

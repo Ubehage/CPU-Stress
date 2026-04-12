@@ -1,10 +1,12 @@
-# CPU-Stress Tool (1.0.4)
+# CPU-Stress Tool (1.1)
 
 A small and portable CPU stress tool with full user-control over each logical processor.
 
 Recent changes:  
-(1.0.4):  
-Rewrote the stress-algorithm with assembly to generate much more heat on modern cpu's.
+(1.1):  
+- Rewrote the stress-algorithm with assembly to generate much more heat on modern cpu's.
+- Added detection of CPU-technologies, and wrote different stress-algorithms for older and newer cpu's.
+
 
 ## Features
 - Per-core CPU stress control (one process per logical core)

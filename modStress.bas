@@ -6,6 +6,19 @@ Private Const PAGE_EXECUTE_READWRITE As Long = &H40
 Private Const LOOP_SIZE   As Long = 1000000
 Private Const LOOP_COUNT As Long = 100
 
+Public Enum CPU_Capabilities
+  ccAVX = &H1
+  ccSSE2 = &H2
+  ccLegacy = &H3
+End Enum
+
+Private Type CPUID_Result
+  dwEAX As Long
+  dwEBX As Long
+  dwECX As Long
+  dwEDX As Long
+End Type
+
 Private Declare Sub Sleep Lib "kernel32" (ByVal dwMilliseconds As Long)
 Private Declare Function CallWindowProc Lib "user32" Alias "CallWindowProcA" (ByVal lpPrevWndFunc As Long, ByVal hWnd As Long, ByVal uMsg As Long, ByVal wParam As Long, ByVal lParam As Long) As Long 'Used to intercept and process VB-window messages (hence the -A variant)
 Private Declare Function VirtualProtect Lib "kernel32" (lpAddress As Any, ByVal dwSize As Long, ByVal flNewProtect As Long, lpflOldProtect As Long) As Long
@@ -13,15 +26,16 @@ Private Declare Function VirtualProtect Lib "kernel32" (lpAddress As Any, ByVal 
 Public Sub StressLoop()
   Static asmCode() As Byte
   Static hasASM As Boolean
+  Static asmAddr As Long
   Dim i As Long
   If hasASM = False Then
-    Dim oProtect As Long
-    asmCode = SplitAssemblyBytes("55 89 E5 57 8B 7D 10 B8 01 00 00 00 F2 0F 2A C8 0F 28 C1 0F 59 C0 0F 58 C1 0F 59 C0 0F 58 C1 4F 75 F1 5F 5D C2 10 00")
-    Call VirtualProtect(asmCode(0), UBound(asmCode) + 1, PAGE_EXECUTE_READWRITE, oProtect)
+    asmCode = SplitAssemblyBytes(GetOptimizedStressAssembly())
+    AllowAssemblyExecution asmCode()
+    asmAddr = VarPtr(asmCode(0))
     hasASM = True
   End If
   For i = 1 To LOOP_COUNT
-    Call CallWindowProc(VarPtr(asmCode(0)), 0, 0, LOOP_SIZE, 0)
+    Call CallWindowProc(asmAddr, 0, 0, LOOP_SIZE, 0)
     Call Sleep(0)
   Next
 End Sub
@@ -35,3 +49,34 @@ Private Function SplitAssemblyBytes(AssemblyBytes As String) As Byte()
   Next
   SplitAssemblyBytes = b
 End Function
+
+Private Function GetOptimizedStressAssembly() As String
+  Select Case GetCPUCapabilities()
+    Case CPU_Capabilities.ccAVX
+      GetOptimizedStressAssembly = "55 89 E5 53 57 8B 7D 10 0F 28 C1 0F 28 D1 0F 28 D9 0F 28 E1 0F 28 E9 0F 28 F1 0F 28 F9 0F 59 C1 0F 59 D1 0F 59 D9 0F 59 E1 0F 59 E9 0F 59 F1 0F 59 F9 0F 58 C1 0F 58 D1 0F 58 D9 0F 58 E1 0F 58 E9 0F 58 F1 0F 58 F9 4F 75 D1 5F 5B 5D C2 10 00"
+    Case CPU_Capabilities.ccSSE2
+      GetOptimizedStressAssembly = "55 89 E5 57 8B 7D 10 B8 01 00 00 00 F2 0F 2A C8 0F 28 C1 0F 59 C0 0F 58 C1 0F 59 C0 0F 58 C1 4F 75 F1 5F 5D C2 10 00"
+    Case CPU_Capabilities.ccLegacy
+      GetOptimizedStressAssembly = "55 89 E5 53 57 8B 7D 10 D9 E8 D9 E8 DE F1 DE F1 DE F1 DD D8 4F 75 F1 5F 5B 5D C2 10 00"
+  End Select
+End Function
+
+Public Function GetCPUCapabilities() As CPU_Capabilities
+  Dim cpuCode() As Byte
+  Dim CPUResult As CPUID_Result
+  cpuCode = SplitAssemblyBytes("55 89 E5 53 57 8B 45 08 8B 7D 0C 31 C9 0F A2 89 07 89 5F 04 89 4F 08 89 57 0C 5F 5B 5D C2 10 00")
+  AllowAssemblyExecution cpuCode()
+  Call CallWindowProc(VarPtr(cpuCode(0)), 1, VarPtr(CPUResult), 0, 0)
+  If (CPUResult.dwECX And &H10000000) Then
+    GetCPUCapabilities = ccAVX
+  ElseIf (CPUResult.dwEDX And &H4000000) Then
+    GetCPUCapabilities = ccSSE2
+  Else
+    GetCPUCapabilities = ccLegacy
+  End If
+End Function
+
+Private Sub AllowAssemblyExecution(AssemblyArray() As Byte)
+  Dim oProtect As Long
+  Call VirtualProtect(AssemblyArray(0), UBound(AssemblyArray) + 1, PAGE_EXECUTE_READWRITE, oProtect)
+End Sub

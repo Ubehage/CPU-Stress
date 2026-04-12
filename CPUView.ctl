@@ -175,13 +175,18 @@ Private Sub DrawTitle()
 End Sub
 
 Private Sub DrawCPUName()
-  Dim X As Long
+  Dim X As Long, cName As String, cCap As CPU_Capabilities
+  cCap = GetCPUCapabilities()
+  cName = CPUInfo.Name & " (" & _
+                      IIf(cCap = ccAVX, "AVX", _
+                      IIf(cCap = ccSSE2, "SSE2", "Legacy")) & _
+                      ")"
   SetControlFont , True, True
   With UserControl
-    .CurrentX = ((UserControl.ScaleWidth - UserControl.TextWidth(CPUInfo.Name)) \ 2)
+    .CurrentX = ((UserControl.ScaleWidth - UserControl.TextWidth(cName)) \ 2)
     .CurrentY = ViewTop
   End With
-  UserControl.Print CPUInfo.Name
+  UserControl.Print cName
   ViewTop = (UserControl.CurrentY + Screen.TwipsPerPixelY)
 End Sub
 
