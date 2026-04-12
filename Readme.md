@@ -1,10 +1,10 @@
-# CPU-Stress Tool (1.0.3)
+# CPU-Stress Tool (1.0.4)
 
 A small and portable CPU stress tool with full user-control over each logical processor.
 
 Recent changes:  
-Changed process priority to HIGH. All other processes will now be suppressed.  
-Rewrote the stress-algorithm to allow UI-responsiveness.
+(1.0.4):  
+Rewrote the stress-algorithm with assembly to generate much more heat on modern cpu's.
 
 ## Features
 - Per-core CPU stress control (one process per logical core)
