@@ -36,7 +36,7 @@ Public Sub StressLoop()
   End If
   For i = 1 To LOOP_COUNT
     Call CallWindowProc(asmAddr, 0, 0, LOOP_SIZE, 0)
-    Call Sleep(0)
+    'Call Sleep(0)
   Next
 End Sub
 
