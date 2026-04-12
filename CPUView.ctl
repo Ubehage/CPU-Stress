@@ -81,6 +81,8 @@ Dim m_IsPressed As Boolean
 Dim m_MouseIsDown As Boolean
 Dim m_PressedIndex As Long
 
+Dim m_DisplayCPUName As String
+
 Dim FixedWindowSize As POINTAPI
 Dim LoadTextSize As Long
 
@@ -175,18 +177,13 @@ Private Sub DrawTitle()
 End Sub
 
 Private Sub DrawCPUName()
-  Dim X As Long, cName As String, cCap As CPU_Capabilities
-  cCap = GetCPUCapabilities()
-  cName = CPUInfo.Name & " (" & _
-                      IIf(cCap = ccAVX, "AVX", _
-                      IIf(cCap = ccSSE2, "SSE2", "Legacy")) & _
-                      ")"
+  Dim X As Long
   SetControlFont , True, True
   With UserControl
-    .CurrentX = ((UserControl.ScaleWidth - UserControl.TextWidth(cName)) \ 2)
+    .CurrentX = ((UserControl.ScaleWidth - UserControl.TextWidth(m_DisplayCPUName)) \ 2)
     .CurrentY = ViewTop
   End With
-  UserControl.Print cName
+  UserControl.Print m_DisplayCPUName
   ViewTop = (UserControl.CurrentY + Screen.TwipsPerPixelY)
 End Sub
 
@@ -434,11 +431,17 @@ Private Sub InitCPUInfo()
 End Sub
 
 Private Sub GetCPUInfo()
+  Dim cCap As CPU_Capabilities
   FillCPUInfo
   ReDim cpuRECTs(1 To TotalCores) As RECT
   ReDim CPULoad(TotalCores - 1) As Double
   ReDim oldCPULoad(TotalCores - 1) As Double
   ReDim CPUBusy(1 To TotalCores) As Boolean
+  cCap = GetCPUCapabilities()
+  m_DisplayCPUName = CPUInfo.Name & " (" & _
+                      IIf(cCap = ccAVX, "AVX", _
+                      IIf(cCap = ccSSE2, "SSE2", "Legacy")) & _
+                      ")"
 End Sub
 
 Private Function GetCPURectsTotalSize() As POINTAPI
