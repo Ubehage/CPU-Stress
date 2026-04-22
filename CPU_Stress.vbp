@@ -13,6 +13,7 @@ Module=modSharedMemory; modSharedMemory.bas
 UserControl=StatusBar.ctl
 Module=modStress; modStress.bas
 Form=frmStress.frm
+Module=modCPU; modCPU.bas
 ResFile32="CPU_Stress.RES"
 IconForm="frmMain"
 Startup="Sub Main"

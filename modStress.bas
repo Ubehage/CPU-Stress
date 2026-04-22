@@ -1,27 +1,8 @@
 Attribute VB_Name = "modStress"
 Option Explicit
 
-Private Const PAGE_EXECUTE_READWRITE As Long = &H40
-
 Private Const LOOP_SIZE   As Long = 1000000
 Private Const LOOP_COUNT As Long = 100
-
-Public Enum CPU_Capabilities
-  ccAVX = &H1
-  ccSSE2 = &H2
-  ccLegacy = &H3
-End Enum
-
-Private Type CPUID_Result
-  dwEAX As Long
-  dwEBX As Long
-  dwECX As Long
-  dwEDX As Long
-End Type
-
-Private Declare Sub Sleep Lib "kernel32" (ByVal dwMilliseconds As Long)
-Private Declare Function CallWindowProc Lib "user32" Alias "CallWindowProcA" (ByVal lpPrevWndFunc As Long, ByVal hWnd As Long, ByVal uMsg As Long, ByVal wParam As Long, ByVal lParam As Long) As Long 'Used to intercept and process VB-window messages (hence the -A variant)
-Private Declare Function VirtualProtect Lib "kernel32" (lpAddress As Any, ByVal dwSize As Long, ByVal flNewProtect As Long, lpflOldProtect As Long) As Long
 
 Public Sub StressLoop()
   Static asmCode() As Byte
@@ -36,19 +17,9 @@ Public Sub StressLoop()
   End If
   For i = 1 To LOOP_COUNT
     Call CallWindowProc(asmAddr, 0, 0, LOOP_SIZE, 0)
-    'Call Sleep(0)
   Next
+  Call Sleep(0)
 End Sub
-
-Private Function SplitAssemblyBytes(AssemblyBytes As String) As Byte()
-  Dim aBytes() As String, b() As Byte, i As Long
-  aBytes = Split(AssemblyBytes, " ")
-  ReDim b(0 To UBound(aBytes)) As Byte
-  For i = 0 To UBound(aBytes)
-    b(i) = CByte("&H" & aBytes(i))
-  Next
-  SplitAssemblyBytes = b
-End Function
 
 Private Function GetOptimizedStressAssembly() As String
   Select Case GetCPUCapabilities()
@@ -127,23 +98,3 @@ Private Function GetOptimizedStressAssembly() As String
       'ret 16
   End Select
 End Function
-
-Public Function GetCPUCapabilities() As CPU_Capabilities
-  Dim cpuCode() As Byte
-  Dim CPUResult As CPUID_Result
-  cpuCode = SplitAssemblyBytes("55 89 E5 53 57 8B 45 08 8B 7D 0C 31 C9 0F A2 89 07 89 5F 04 89 4F 08 89 57 0C 5F 5B 5D C2 10 00")
-  AllowAssemblyExecution cpuCode()
-  Call CallWindowProc(VarPtr(cpuCode(0)), 1, VarPtr(CPUResult), 0, 0)
-  If (CPUResult.dwECX And &H10000000) Then
-    GetCPUCapabilities = ccAVX
-  ElseIf (CPUResult.dwEDX And &H4000000) Then
-    GetCPUCapabilities = ccSSE2
-  Else
-    GetCPUCapabilities = ccLegacy
-  End If
-End Function
-
-Private Sub AllowAssemblyExecution(AssemblyArray() As Byte)
-  Dim oProtect As Long
-  Call VirtualProtect(AssemblyArray(0), UBound(AssemblyArray) + 1, PAGE_EXECUTE_READWRITE, oProtect)
-End Sub

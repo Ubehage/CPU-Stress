@@ -51,6 +51,7 @@ Private Sub RunStressTest()
   InStressLoop = True
   Do
     StressLoop
+    Call Sleep(0)
     CheckAppMessage
     If IsProcessAlive(SharedMemory.Instances(0).mProcessID) = False Then
       ExitNow = True
