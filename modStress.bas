@@ -18,7 +18,6 @@ Public Sub StressLoop()
   For i = 1 To LOOP_COUNT
     Call CallWindowProc(asmAddr, 0, 0, LOOP_SIZE, 0)
   Next
-  Call Sleep(0)
 End Sub
 
 Private Function GetOptimizedStressAssembly() As String
