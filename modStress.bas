@@ -2,7 +2,7 @@ Attribute VB_Name = "modStress"
 Option Explicit
 
 Private Const LOOP_SIZE   As Long = 1000000
-Private Const LOOP_COUNT As Long = 100
+Private Const LOOP_COUNT As Long = 1000
 
 Public Sub StressLoop()
   Static asmCode() As Byte
