@@ -2,7 +2,29 @@
 
 A small and portable CPU stress tool with full user-control over each logical processor.
 
-Recent changes:  
+## Screenshot
+![A little overworked](./screenshot.png)
+
+## Features
+- Per-core CPU stress control (one process per logical core)
+- Visual overview of all logical processors
+- Click individual cores to start/stop stress
+- One-click “Engage all cores”
+- One-click global stop
+- Optional live CPU load monitoring
+- UI remains responsive even at 100% CPU load
+- Automatic cleanup: all stress processes terminate when the main window closes
+  
+## Safety notice
+- This software intentionally generates sustained high CPU load.
+- Prolonged use can cause thermal throttling, instability, or hardware damage.
+- Use at your own risk.
+- Recommended environments:
+    - Test machines
+    - Virtual machines
+    - Systems with active thermal monitoring
+
+## Recent changes:  
 (1.1.2):  
 - Fixed a few small typos in CPUView.
 - Fixed: CPUView could crash the program and IDE if you loaded more than one instance of the control.
@@ -15,30 +37,6 @@ Recent changes:
 (1.1):  
 - Rewrote the stress-algorithm in assembly to generate much more heat on modern cpu's.
 - Added detection of CPU-technologies, and wrote different stress-algorithms for older and newer cpu's.
-
-
-## Features
-- Per-core CPU stress control (one process per logical core)
-- Visual overview of all logical processors
-- Click individual cores to start/stop stress
-- One-click “Engage all cores”
-- One-click global stop
-- Optional live CPU load monitoring
-- UI remains responsive even at 100% CPU load
-- Automatic cleanup: all stress processes terminate when the main window closes
-
-  
-## Safety notice
-- This software intentionally generates sustained high CPU load.
-- Prolonged use can cause thermal throttling, instability, or hardware damage.
-- Use at your own risk.
-- Recommended environments:
-    - Test machines
-    - Virtual machines
-    - Systems with active thermal monitoring
-
-## Screenshot
-![A little overworked](./screenshot.png)
 
 ## License
 - MIT License. All code is free to use and modify.
