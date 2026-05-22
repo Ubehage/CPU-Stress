@@ -416,7 +416,7 @@ Private Sub SetCPUTextSize()
     UserControl.Font.Size = sVal
     tW = UserControl.TextWidth("100%")
     tH = UserControl.TextHeight("100%")
-    If (rW <= rW And tH <= rH) Then
+    If (tW <= rW And tH <= rH) Then
       LoadTextSize = sVal
       sMin = (sVal + 1)
     Else

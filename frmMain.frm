@@ -391,7 +391,7 @@ End Sub
 
 Private Sub StatusTimer_Timer()
   StatusTimer.Enabled = False
-  If ExitNow Then Unload Me
+  If ExitNow Then Unload Me: Exit Sub
   CheckActiveProcesses
   StatusTimer.Enabled = True
 End Sub

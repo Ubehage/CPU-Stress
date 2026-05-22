@@ -46,6 +46,8 @@ Public Function GetCPUCoreCount() As CPU_Info
   ReDim bBuffer(cbBuffer - 1) As Byte
   If GetLogicalProcessorInformation(bBuffer(0), cbBuffer) = 0 Then Exit Function
   nEntries = (cbBuffer / structSize)
+  GetCPUCoreCount.PhysicalCores = 0
+  Erase GetCPUCoreCount.KernelsPerCore
   For i = 0 To (nEntries - 1)
     bOffset = (i * structSize)
     CopyMemory info, bBuffer(bOffset), structSize

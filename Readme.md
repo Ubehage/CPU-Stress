@@ -1,8 +1,13 @@
-# CPU-Stress Tool (1.1.1)
+# CPU-Stress Tool (1.1.2)
 
 A small and portable CPU stress tool with full user-control over each logical processor.
 
 Recent changes:  
+(1.1.2):  
+- Fixed a few small typos in CPUView.
+- Fixed: CPUView could crash the program and IDE if you loaded more than one instance of the control.
+- Fixed a small logical error when closing the main window.
+  
 (1.1.1):  
 - Removed some accidental debugging code.
 - Increased workload for stress-module.
