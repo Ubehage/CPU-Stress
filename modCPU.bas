@@ -5,8 +5,9 @@ Private Const PAGE_EXECUTE_READWRITE As Long = &H40
 
 Public Enum CPU_Capabilities
   ccAVX = &H1
-  ccSSE2 = &H2
-  ccLegacy = &H3
+  ccAVX_YMM = &H2
+  ccSSE2 = &H3
+  ccLegacy = &H4
 End Enum
 
 Private Type CPUID_Result
@@ -127,12 +128,21 @@ Public Function GetCPUCapabilities() As CPU_Capabilities
   AllowAssemblyExecution cpuCode()
   Call CallWindowProc(VarPtr(cpuCode(0)), 1, VarPtr(CPUResult), 0, 0)
   If (CPUResult.dwECX And &H10000000) Then
-    GetCPUCapabilities = ccAVX
+    If IsYMMEnabled() = True Then GetCPUCapabilities = ccAVX_YMM Else GetCPUCapabilities = ccAVX
   ElseIf (CPUResult.dwEDX And &H4000000) Then
     GetCPUCapabilities = ccSSE2
   Else
     GetCPUCapabilities = ccLegacy
   End If
+End Function
+
+Public Function IsYMMEnabled() As Boolean
+  Dim cpuCode() As Byte
+  Dim CPUResult As CPUID_Result
+  cpuCode = SplitAssemblyBytes("55 89 E5 53 57 8B 7D 0C 31 C9 0F 01 D0 89 07 89 57 04 5F 5B 5D C2 10 00")
+  AllowAssemblyExecution cpuCode()
+  Call CallWindowProc(VarPtr(cpuCode(0)), 1, VarPtr(CPUResult), 0, 0)
+  IsYMMEnabled = (CPUResult.dwEAX And &H6) = &H6
 End Function
 
 Public Sub AllowAssemblyExecution(AssemblyArray() As Byte)

@@ -1,4 +1,4 @@
-# CPU-Stress Tool (1.1.2)
+# CPU-Stress Tool (1.1.3)
 
 A small and portable CPU stress tool with full user-control over each logical processor.
 
@@ -25,6 +25,11 @@ A small and portable CPU stress tool with full user-control over each logical pr
     - Systems with active thermal monitoring
 
 ## Recent changes:  
+(1.1.3):  
+- Added another stress-loop for YMM-registers.
+- Currently working on:
+  - Option to select between technologies.
+  - More stress-loops for more cpus.
 (1.1.2):  
 - Fixed a few small typos in CPUView.
 - Fixed: CPUView could crash the program and IDE if you loaded more than one instance of the control.

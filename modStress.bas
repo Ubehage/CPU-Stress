@@ -22,6 +22,43 @@ End Sub
 
 Private Function GetOptimizedStressAssembly() As String
   Select Case GetCPUCapabilities()
+    Case CPU_Capabilities.ccAVX_YMM
+      GetOptimizedStressAssembly = "55 89 E5 53 57 8B 7D 10 B8 01 00 00 00 C5 F3 2A C8 C5 FC 28 C1 C5 FC 28 D1 C5 FC 28 D9 C5 FC 28 E1 C5 FC 28 E9 C5 FC 28 F1 C5 FC 28 F9 C5 FC 59 C1 C5 FC 59 D1 C5 FC 59 D9 C5 FC 59 E1 C5 FC 59 E9 C5 FC 59 F1 C5 FC 59 F9 C5 FC 58 C1 C5 FC 58 D1 C5 FC 58 D9 C5 FC 58 E1 C5 FC 58 E9 C5 FC 58 F1 C5 FC 58 F9 4F 75 C9 C5 F8 77 5F 5B 5D C2 10 00"
+      'push ebp
+      'mov ebp, esp
+      'push ebx
+      'push edi
+      'mov edi, [ebp+16]
+      'mov eax, 1
+      'vcvtsi2sd xmm1, xmm1, eax
+      'vmovaps ymm0, ymm1
+      'vmovaps ymm2, ymm1
+      'vmovaps ymm3, ymm1
+      'vmovaps ymm4, ymm1
+      'vmovaps ymm5, ymm1
+      'vmovaps ymm6, ymm1
+      'vmovaps ymm7, ymm1
+      'vmulps ymm0, ymm0, ymm1
+      'vmulps ymm2, ymm2, ymm1
+      'vmulps ymm3, ymm3, ymm1
+      'vmulps ymm4, ymm4, ymm1
+      'vmulps ymm5, ymm5, ymm1
+      'vmulps ymm6, ymm6, ymm1
+      'vmulps ymm7, ymm7, ymm1
+      'vaddps ymm0, ymm0, ymm1
+      'vaddps ymm2, ymm2, ymm1
+      'vaddps ymm3, ymm3, ymm1
+      'vaddps ymm4, ymm4, ymm1
+      'vaddps ymm5, ymm5, ymm1
+      'vaddps ymm6, ymm6, ymm1
+      'vaddps ymm7, ymm7, ymm1
+      'dec edi
+      'jnz -55
+      'vzeroupper
+      'pop edi
+      'pop ebx
+      'pop ebp
+      'ret 16
     Case CPU_Capabilities.ccAVX
       GetOptimizedStressAssembly = "55 89 E5 53 57 8B 7D 10 B8 01 00 00 00 F2 0F 2A C8 0F 28 C1 0F 28 D1 0F 28 D9 0F 28 E1 0F 28 E9 0F 28 F1 0F 28 F9 0F 59 C1 0F 59 D1 0F 59 D9 0F 59 E1 0F 59 E9 0F 59 F1 0F 59 F9 0F 58 C1 0F 58 D1 0F 58 D9 0F 58 E1 0F 58 E9 0F 58 F1 0F 58 F9 4F 75 D1 5F 5B 5D C2 10 00"
       'push ebp

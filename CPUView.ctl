@@ -438,11 +438,21 @@ Private Sub GetCPUInfo()
   ReDim oldCPULoad(TotalCores - 1) As Double
   ReDim CPUBusy(1 To TotalCores) As Boolean
   cCap = GetCPUCapabilities()
-  m_DisplayCPUName = CPUInfo.Name & " (" & _
-                      IIf(cCap = ccAVX, "AVX", _
-                      IIf(cCap = ccSSE2, "SSE2", "Legacy")) & _
-                      ")"
+  m_DisplayCPUName = CPUInfo.Name & " (" & GetCPUTechString(cCap) & ")"
 End Sub
+
+Private Function GetCPUTechString(TechCapabilities As CPU_Capabilities) As String
+  Select Case TechCapabilities
+    Case CPU_Capabilities.ccAVX_YMM
+      GetCPUTechString = "AVX/YMM"
+    Case CPU_Capabilities.ccAVX
+      GetCPUTechString = "AVX"
+    Case CPU_Capabilities.ccSSE2
+      GetCPUTechString = "SSE2"
+    Case CPU_Capabilities.ccLegacy
+      GetCPUTechString = "Legacy"
+  End Select
+End Function
 
 Private Function GetCPURectsTotalSize() As POINTAPI
   Dim i As Long, w As Long, h As Long
