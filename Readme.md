@@ -28,7 +28,7 @@ A small and portable CPU stress tool with full user-control over each logical pr
 (1.1.3):  
 - Added another stress-loop for YMM-registers.
 - Currently working on:
-  - Option to select between technologies.
+  - Option to select between stress-types.
   - More stress-loops for more cpus.
   
 (1.1.2):  
