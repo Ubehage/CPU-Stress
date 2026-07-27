@@ -57,6 +57,12 @@ Public Enum XorY_Enum
   xyY = &H2
 End Enum
 
+Private Enum Start_Code
+  scNone = &H0
+  scMainWindow = &H1
+  scStressWorker = &H2
+End Enum
+
 Dim DoRun As Boolean
 
 Global ChangedByCode As Boolean
@@ -65,22 +71,23 @@ Global ExitNow As Boolean
 Global IsRunningInIDE As Boolean
 
 Sub Main()
-  Dim s As Integer
   IsRunningInIDE = IsInIDE()
   Call InitCommonControls
-  s = Start
-  If s = 0 Then Exit Sub
-  If s = 1 Then
-    LoadMainForm
-  ElseIf s = 2 Then
-    FillCPUInfo
-    LoadStressForm
-  End If
+  Select Case Start()
+    Case Start_Code.scMainWindow
+      LoadMainForm
+    Case Start_Code.scStressWorker
+      FillCPUInfo
+      LoadStressForm
+    Case Else
+      Exit Sub
+  End Select
   SharedMemory.Instances(SharedMemOffset).mProcessID = GetMypId
   Call WriteToSharedMemory(False)
+  SetProcessPriority pcHigh
 End Sub
 
-Private Function Start() As Integer
+Private Function Start() As Start_Code
   If OpenSharedMemory() = False Then
     MsgBox "Could not open shared memory!" & vbCrLf & "This program cannot continue.", vbOKOnly Or vbCritical, "Error opening shared memory"
     Exit Function
@@ -92,7 +99,7 @@ Private Function Start() As Integer
       UnloadAll
       Exit Function
     End If
-    Start = 2
+    Start = scStressWorker
   Else
     If SharedMemOffset <> 0 Then
       MsgBox "Invalid command parameters!" & vbCrLf & "This program will now exit.", vbOKOnly Or vbInformation, "Invalid command parameters"
@@ -103,7 +110,7 @@ Private Function Start() As Integer
       UnloadAll
       Exit Function
     End If
-    Start = 1
+    Start = scMainWindow
   End If
 End Function
 

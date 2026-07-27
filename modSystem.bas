@@ -43,6 +43,15 @@ Global Const REALTIME_PRIORITY_CLASS As Long = &H100
 Global Const HKEY_LOCAL_MACHINE = &H80000002
 Global Const KEY_READ = &H20019
 
+Public Enum PRIORITY_CONSTANTS
+  pcIdle = IDLE_PRIORITY_CLASS
+  pcBelowNormal = BELOW_NORMAL_PRIORITY_CLASS
+  pcNormal = NORMAL_PRIORITY_CLASS
+  pcAboveNormal = ABOVE_NORMAL_PRIORITY_CLASS
+  pcHigh = HIGH_PRIORITY_CLASS
+  pcRealTime = REALTIME_PRIORITY_CLASS
+End Enum
+
 Public Enum COMMONCONTROLS_CLASSES
   ccListView_Classes = ICC_LISTVIEW_CLASSES
   ccTreeView_Classes = ICC_TREEVIEW_CLASSES
@@ -184,7 +193,7 @@ Public Function CheckPrevInstance() As Boolean
   CheckPrevInstance = True
 End Function
 
-Public Sub SetProcessPriority(pPriority As Long)
+Public Sub SetProcessPriority(pPriority As PRIORITY_CONSTANTS)
   Dim hProc As Long
   hProc = GetCurrentProcess()
   Call SetPriorityClass(hProc, pPriority)

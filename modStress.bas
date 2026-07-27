@@ -1,8 +1,8 @@
 Attribute VB_Name = "modStress"
 Option Explicit
 
-Private Const LOOP_SIZE   As Long = 1000000
-Private Const LOOP_COUNT As Long = 1000
+Private Const LOOP_SIZE   As Long = 100000000
+Private Const LOOP_COUNT As Long = 10
 
 Public Sub StressLoop()
   Static asmCode() As Byte
@@ -15,9 +15,7 @@ Public Sub StressLoop()
     asmAddr = VarPtr(asmCode(0))
     hasASM = True
   End If
-  For i = 1 To LOOP_COUNT
-    Call CallWindowProc(asmAddr, 0, 0, LOOP_SIZE, 0)
-  Next
+  Call CallWindowProc(asmAddr, 0, 0, (LOOP_SIZE * LOOP_COUNT), 0)
 End Sub
 
 Private Function GetOptimizedStressAssembly() As String

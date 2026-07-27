@@ -30,14 +30,13 @@ Dim ExitStressLoop As Boolean
 
 Public Sub Start()
   LockProcessToCPU (SharedMemOffset - 1)
-  SetProcessPriority HIGH_PRIORITY_CLASS
   StartIdleTimer
 End Sub
 
 Private Sub StartIdleTimer()
   KillIdleTimer
   Set IdleTimer = New CPUTimer
-  IdleTimer.Interval = 200
+  IdleTimer.Interval = 500
   IdleTimer.Enabled = True
 End Sub
 
@@ -50,7 +49,7 @@ End Sub
 Private Sub RunStressTest()
   InStressLoop = True
   Do
-    StressLoop
+    Call StressLoop
     Call Sleep(0)
     CheckAppMessage
     If IsProcessAlive(SharedMemory.Instances(0).mProcessID) = False Then
@@ -70,9 +69,7 @@ Private Sub CheckAppMessage()
         .mCommand = 0
         .mStatus = MEMSTATUS_RUNNING
         Call WriteToSharedMemory(False)
-        If InStressLoop = False Then
-          RunStressTest
-        End If
+        If InStressLoop = False Then RunStressTest
       Case MEMMSG_STOPSTRESS
         .mCommand = 0
         .mStatus = MEMSTATUS_IDLE
