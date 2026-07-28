@@ -45,4 +45,6 @@ A small and portable CPU stress tool with full user-control over each logical pr
 - Added detection of CPU-technologies, and wrote different stress-algorithms for older and newer cpu's.
 
 ## License
-- MIT License. All code is free to use and modify.
+- MIT License. All code is free to use and modify.  
+
+[![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/Ubehage/CPU-Stress)
