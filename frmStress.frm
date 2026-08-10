@@ -33,6 +33,10 @@ Public Sub Start()
   StartIdleTimer
 End Sub
 
+Friend Sub HibernationTrigger(IsHibernating As Boolean)
+  'No need to do anything here
+End Sub
+
 Private Sub StartIdleTimer()
   KillIdleTimer
   Set IdleTimer = New CPUTimer

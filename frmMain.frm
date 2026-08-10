@@ -180,6 +180,16 @@ Friend Sub SetForm()
   SetStatusTimer
 End Sub
 
+Friend Sub HibernationTrigger(IsHibernating As Boolean)
+  Static AutoRefreshView As Boolean
+  If IsHibernating = True Then
+    AutoRefreshView = CPUView1.AutoUpdate
+    CPUView1.AutoUpdate = False
+  Else
+    CPUView1.AutoUpdate = AutoRefreshView
+  End If
+End Sub
+
 Private Sub MoveObjects()
   On Error GoTo MoveError 'We don't check for invalid values or if the window is too small.
                           'We just ignore any errors and move on.
