@@ -117,13 +117,13 @@ End Function
 Private Sub LoadMainForm()
   Load frmMain
   frmMain.SetForm
-  HookWindowProc frmMain.hWnd, False
+  If IsInIDE = False Then HookWindowProc frmMain.hWnd, False
 End Sub
 
 Private Sub LoadStressForm()
   Load frmStress
   frmStress.Start
-  HookWindowProc frmStress.hWnd, True
+  If IsInIDE = False Then HookWindowProc frmStress.hWnd, True
 End Sub
 
 Public Sub UnloadAll()
