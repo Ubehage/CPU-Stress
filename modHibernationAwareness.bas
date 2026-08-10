@@ -3,11 +3,12 @@ Option Explicit
 
 Private Const GWL_WNDPROC = -4
 Private Const WM_POWERBROADCAST = &H218 'Power state is changing
+
 Private Const PBT_APMSUSPEND As Long = &H4 'Windows is hibernating
 Private Const PBT_APMRESUMEAUTOMATIC = &H12 'Windows has resumed from suspended state.
 
 Private Declare Function SetWindowLong Lib "user32" Alias "SetWindowLongA" (ByVal hWnd As Long, ByVal nIndex As Long, ByVal dwNewLong As Long) As Long
-Private Declare Function CallWindowProc Lib "user32" Alias "CallWindowProcA" (ByVal lpPrevWndFunc As Long, ByVal hWnd As Long, ByVal Msg As Long, ByVal wParam As Long, ByVal lParam As Long) As Long
+Private Declare Function CallWindowProc Lib "user32" Alias "CallWindowProcA" (ByVal lpPrevWndFunc As Long, ByVal hWnd As Long, ByVal msg As Long, ByVal wParam As Long, ByVal lParam As Long) As Long
 
 Dim OldWndProc As Long
 Dim HookhWnd As Long

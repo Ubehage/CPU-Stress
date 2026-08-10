@@ -84,7 +84,7 @@ Sub Main()
   End Select
   SharedMemory.Instances(SharedMemOffset).mProcessID = GetMypId
   Call WriteToSharedMemory(False)
-  SetProcessPriority pcHigh
+  'SetProcessPriority pcAboveNormal
 End Sub
 
 Private Function Start() As Start_Code
@@ -117,13 +117,13 @@ End Function
 Private Sub LoadMainForm()
   Load frmMain
   frmMain.SetForm
-  If IsInIDE = False Then HookWindowProc frmMain.hWnd, False
+  If IsRunningInIDE = False Then HookWindowProc frmMain.hWnd, False
 End Sub
 
 Private Sub LoadStressForm()
   Load frmStress
   frmStress.Start
-  If IsInIDE = False Then HookWindowProc frmStress.hWnd, True
+  If IsRunningInIDE = False Then HookWindowProc frmStress.hWnd, True
 End Sub
 
 Public Sub UnloadAll()

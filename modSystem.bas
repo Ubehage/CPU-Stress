@@ -5,6 +5,8 @@ Global Const INVALID_HANDLE_VALUE As Long = -1&
 
 Global Const ERROR_ALREADY_EXISTS As Long = 183&
 
+Private Const PM_REMOVE As Long = &H1
+
 Private Const SYNCHRONIZE As Long = &H100000
 Private Const WAIT_OBJECT_0 As Long = 0&
 Private Const WAIT_TIMEOUT As Long = &H102&
@@ -90,6 +92,15 @@ Private Type tagINITCOMMONCONTROLSEX
   dwICC As Long
 End Type
 
+Private Type WINDOW_MSG
+    hWnd As Long
+    message As Long
+    wParam As Long
+    lParam As Long
+    time As Long
+    pt As POINTAPI
+End Type
+
 Private Declare Function SetWindowPos Lib "user32.dll" (ByVal hWnd As Long, ByVal hWndInsertAfter As Long, ByVal X As Long, ByVal Y As Long, ByVal cX As Long, ByVal cY As Long, ByVal wFlags As Long) As Long
 Private Declare Sub InitCommonControls9x Lib "comctl32" Alias "InitCommonControls" ()
 Private Declare Function InitCommonControlsEx Lib "comctl32" (lpInitCtrls As tagINITCOMMONCONTROLSEX) As Boolean
@@ -121,6 +132,12 @@ Public Declare Function RegCloseKey Lib "advapi32.dll" (ByVal hKey As Long) As L
 Public Declare Sub Sleep Lib "kernel32" (ByVal dwMilliseconds As Long)
 Public Declare Function CallWindowProc Lib "user32" Alias "CallWindowProcA" (ByVal lpPrevWndFunc As Long, ByVal hWnd As Long, ByVal uMsg As Long, ByVal wParam As Long, ByVal lParam As Long) As Long 'Used to intercept and process VB-window messages (hence the -A variant)
 Public Declare Function VirtualProtect Lib "kernel32" (lpAddress As Any, ByVal dwSize As Long, ByVal flNewProtect As Long, lpflOldProtect As Long) As Long
+
+Private Declare Function PeekMessage Lib "user32" Alias "PeekMessageA" (lpMsg As WINDOW_MSG, ByVal hWnd As Long, ByVal wMsgFilterMin As Long, ByVal wMsgFilterMax As Long, ByVal wRemoveMsg As Long) As Long
+Private Declare Function TranslateMessage Lib "user32" (lpMsg As WINDOW_MSG) As Long
+Private Declare Function DispatchMessage Lib "user32" Alias "DispatchMessageA" (lpMsg As WINDOW_MSG) As Long
+
+Private Declare Function SwitchToThread Lib "kernel32" () As Long
 
 Private Declare Function SetPriorityClass Lib "kernel32" (ByVal hProcess As Long, ByVal dwPriorityClass As Long) As Long
 
@@ -197,4 +214,14 @@ Public Sub SetProcessPriority(pPriority As PRIORITY_CONSTANTS)
   Dim hProc As Long
   hProc = GetCurrentProcess()
   Call SetPriorityClass(hProc, pPriority)
+End Sub
+
+Public Sub DoEvents2(Optional hWnd As Long = 0&)
+  Dim msg As WINDOW_MSG
+  Do While PeekMessage(msg, hWnd, 0&, 0&, PM_REMOVE) <> 0
+    Call TranslateMessage(msg)
+    Call DispatchMessage(msg)
+  Loop
+  Call Sleep(0)
+  Call SwitchToThread
 End Sub

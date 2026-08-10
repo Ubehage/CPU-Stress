@@ -28,13 +28,30 @@ Attribute IdleTimer.VB_VarHelpID = -1
 Dim InStressLoop As Boolean
 Dim ExitStressLoop As Boolean
 
+Dim DontEnableTimer As Boolean
+Dim doStartStress As Boolean
+
 Public Sub Start()
   LockProcessToCPU (SharedMemOffset - 1)
   StartIdleTimer
 End Sub
 
 Friend Sub HibernationTrigger(IsHibernating As Boolean)
-  'No need to do anything here
+  Static wasInStress As Boolean
+  If IsHibernating = True Then
+    If InStressLoop = True Then
+      wasInStress = True
+      ExitStressLoop = True
+    End If
+    DontEnableTimer = True
+  ElseIf IsHibernating = False Then
+    If wasInStress = True Then
+      wasInStress = False
+      doStartStress = True
+    End If
+    DontEnableTimer = False
+    If Not IdleTimer Is Nothing Then IdleTimer.Enabled = True
+  End If
 End Sub
 
 Private Sub StartIdleTimer()
@@ -54,7 +71,7 @@ Private Sub RunStressTest()
   InStressLoop = True
   Do
     Call StressLoop
-    Call Sleep(0)
+    DoEvents2 Me.hWnd
     CheckAppMessage
     If IsProcessAlive(SharedMemory.Instances(0).mProcessID) = False Then
       ExitNow = True
@@ -73,7 +90,8 @@ Private Sub CheckAppMessage()
         .mCommand = 0
         .mStatus = MEMSTATUS_RUNNING
         Call WriteToSharedMemory(False)
-        If InStressLoop = False Then RunStressTest
+        'If InStressLoop = False Then RunStressTest
+        If InStressLoop = False Then doStartStress = True
       Case MEMMSG_STOPSTRESS
         .mCommand = 0
         .mStatus = MEMSTATUS_IDLE
@@ -98,6 +116,13 @@ End Sub
 Private Sub IdleTimer_Timer()
   IdleTimer.Enabled = False
   CheckAppMessage
-  If ExitNow = True Then Unload Me
-  If Not IdleTimer Is Nothing Then IdleTimer.Enabled = True
+  If ExitNow = True Then
+    Unload Me
+    Exit Sub
+  End If
+  If doStartStress = True Then
+    doStartStress = False
+    RunStressTest
+  End If
+  If DontEnableTimer = False Then If Not IdleTimer Is Nothing Then IdleTimer.Enabled = True
 End Sub

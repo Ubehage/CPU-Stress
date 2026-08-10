@@ -1,4 +1,4 @@
-# CPU-Stress Tool (1.1.5)
+# CPU-Stress Tool (1.1.6)
 
 A small and portable CPU stress tool with full user-control over each logical processor.
 
@@ -25,6 +25,9 @@ A small and portable CPU stress tool with full user-control over each logical pr
     - Systems with active thermal monitoring
 
 ## Recent changes:  
+(1.1.6):  
+- Fixed a few bugs with hibernation awareness.
+    
 (1.1.5):  
 - Added Hibernation awareness to all processes.
 
