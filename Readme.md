@@ -28,6 +28,7 @@ A small and portable CPU stress tool with full user-control over each logical pr
 (1.2.0):
 - New module for centralizing mouse-handling easily in VB6.
 - Added native x64 stress routines with AVX/FMA support. All cores stay busy; the main window stays responsive.
+
 (1.1.6):  
 - Fixed a few bugs with hibernation awareness.
     
