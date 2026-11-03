@@ -102,7 +102,7 @@ Public Function GetCPUName() As String
 End Function
 
 Public Sub LockProcessToCPU(CPUIndex As Long)
-  If (CPUIndex < 0 Or CPUIndex > (TotalCores - 1)) Then Exit Sub
+  If (CPUIndex < 0 Or CPUIndex > (TotalCores - 1)) Then Err.Raise 5, "LockProcessToCPU", "Invalid processor index."
   Dim hProc As Long, cMask As Long
   hProc = GetCurrentProcess()
   If CPUIndex <= 30 Then
@@ -110,9 +110,9 @@ Public Sub LockProcessToCPU(CPUIndex As Long)
   ElseIf CPUIndex = 31 Then
     cMask = &H80000000
   Else
-    'Sorry, VB6 cannot go any higher
+    Err.Raise 5, "LockProcessToCPU", "This affinity implementation supports processors 0 through 31."
   End If
-  Call SetProcessAffinityMask(hProc, cMask)
+  If SetProcessAffinityMask(hProc, cMask) = 0 Then Err.Raise vbObjectError + 2401, "LockProcessToCPU", "Cannot assign the worker to its processor."
 End Sub
 
 Public Sub FillCPUInfo()
@@ -127,7 +127,7 @@ Public Function GetCPUCapabilities() As CPU_Capabilities
   cpuCode = SplitAssemblyBytes("55 89 E5 53 57 8B 45 08 8B 7D 0C 31 C9 0F A2 89 07 89 5F 04 89 4F 08 89 57 0C 5F 5B 5D C2 10 00")
   AllowAssemblyExecution cpuCode()
   Call CallWindowProc(VarPtr(cpuCode(0)), 1, VarPtr(CPUResult), 0, 0)
-  If (CPUResult.dwECX And &H10000000) Then
+  If (CPUResult.dwECX And &H1C000000) = &H1C000000 Then
     If IsYMMEnabled() = True Then GetCPUCapabilities = ccAVX_YMM Else GetCPUCapabilities = ccAVX
   ElseIf (CPUResult.dwEDX And &H4000000) Then
     GetCPUCapabilities = ccSSE2

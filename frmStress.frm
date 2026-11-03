@@ -17,47 +17,47 @@ Attribute VB_PredeclaredId = True
 Attribute VB_Exposed = False
 Option Explicit
 
-Private Enum StressStatus
-  sIdle = 1
-  sBusy = 2
-End Enum
-
 Dim WithEvents IdleTimer As CPUTimer
 Attribute IdleTimer.VB_VarHelpID = -1
 
 Dim InStressLoop As Boolean
 Dim ExitStressLoop As Boolean
 
-Dim DontEnableTimer As Boolean
+Dim HibernateTimer As Boolean
 Dim doStartStress As Boolean
+Private ResumeAfterHibernate As Boolean
+Private StartupFailed As Boolean
 
 Public Sub Start()
+  On Error GoTo Failed
   LockProcessToCPU (SharedMemOffset - 1)
+  StartIdleTimer
+  Exit Sub
+Failed:
+  StartupFailed = True
+  PublishWorkerStatus MEMSTATUS_FAILED
   StartIdleTimer
 End Sub
 
-Friend Sub HibernationTrigger(IsHibernating As Boolean)
-  Static wasInStress As Boolean
+Private Sub HibernationTrigger(IsHibernating As Boolean)
   If IsHibernating = True Then
-    If InStressLoop = True Then
-      wasInStress = True
-      ExitStressLoop = True
-    End If
-    DontEnableTimer = True
+    ResumeAfterHibernate = (InStressLoop Or doStartStress)
+    doStartStress = False
+    If InStressLoop Then ExitStressLoop = True
+    HibernateTimer = True
+    PublishWorkerStatus MEMSTATUS_HIBERNATING
   ElseIf IsHibernating = False Then
-    If wasInStress = True Then
-      wasInStress = False
-      doStartStress = True
-    End If
-    DontEnableTimer = False
-    If Not IdleTimer Is Nothing Then IdleTimer.Enabled = True
+    doStartStress = ResumeAfterHibernate
+    ResumeAfterHibernate = False
+    HibernateTimer = False
+    PublishWorkerStatus MEMSTATUS_IDLE
   End If
 End Sub
 
 Private Sub StartIdleTimer()
   KillIdleTimer
   Set IdleTimer = New CPUTimer
-  IdleTimer.Interval = 500
+  IdleTimer.Interval = 100
   IdleTimer.Enabled = True
 End Sub
 
@@ -67,9 +67,14 @@ Private Sub KillIdleTimer()
   Set IdleTimer = Nothing
 End Sub
 
-Private Sub RunStressTest()
+Private Sub RunStress()
+  On Error GoTo Failed
   InStressLoop = True
+  ExitStressLoop = False
+  PublishWorkerStatus MEMSTATUS_RUNNING
   Do
+    CheckAppMessage
+    If ExitStressLoop Or ExitNow Then Exit Do
     Call StressLoop
     DoEvents2 Me.hWnd
     CheckAppMessage
@@ -80,35 +85,59 @@ Private Sub RunStressTest()
   Loop Until ExitStressLoop = True
   InStressLoop = False
   ExitStressLoop = False
+  If ExitNow Then
+    PublishWorkerStatus MEMSTATUS_EXITING
+  ElseIf HibernateTimer Then
+    PublishWorkerStatus MEMSTATUS_HIBERNATING
+  Else
+    PublishWorkerStatus MEMSTATUS_IDLE
+  End If
+  Exit Sub
+Failed:
+  ' A worker reports an initialization/runtime error without a hidden modal
+  ' dialog. The main window remains usable and shows a failed worker count.
+  StressShutdown
+  InStressLoop = False
+  ExitStressLoop = False
+  doStartStress = False
+  PublishWorkerStatus MEMSTATUS_FAILED
 End Sub
 
 Private Sub CheckAppMessage()
-  Call ReadFromSharedMemory(False, SharedMemOffset)
-  With SharedMemory.Instances(SharedMemOffset)
-    Select Case .mCommand
+    Select Case TakeWorkerCommand()
       Case MEMMSG_RUNSTRESS
-        .mCommand = 0
-        .mStatus = MEMSTATUS_RUNNING
-        Call WriteToSharedMemory(False)
-        'If InStressLoop = False Then RunStressTest
-        If InStressLoop = False Then doStartStress = True
+        If Not StartupFailed Then
+          HibernateTimer = False
+          ResumeAfterHibernate = False
+          If Not InStressLoop Then doStartStress = True
+        End If
       Case MEMMSG_STOPSTRESS
-        .mCommand = 0
-        .mStatus = MEMSTATUS_IDLE
-        Call WriteToSharedMemory(False)
+        doStartStress = False
+        ResumeAfterHibernate = False
+        HibernateTimer = False
+        PublishWorkerStatus MEMSTATUS_IDLE
         If InStressLoop = True Then ExitStressLoop = True
       Case MEMMSG_EXIT
+        doStartStress = False
+        PublishWorkerStatus MEMSTATUS_EXITING
         ExitNow = True
         If InStressLoop Then ExitStressLoop = True
-        .mCommand = 0
-        .mStatus = MEMSTATUS_EXITING
-        Call WriteToSharedMemory(False)
+      Case MEMMSG_HIBERNATE
+        HibernationTrigger True
+      Case MEMMSG_RESUME
+        HibernationTrigger False
     End Select
-  End With
 End Sub
 
 Private Sub Form_Unload(Cancel As Integer)
+  If InStressLoop Then
+    Cancel = True
+    ExitNow = True
+    ExitStressLoop = True
+    Exit Sub
+  End If
   KillIdleTimer
+  StressShutdown
   ClearSharedMemoryIndex SharedMemOffset
   UnloadAll
 End Sub
@@ -116,13 +145,20 @@ End Sub
 Private Sub IdleTimer_Timer()
   IdleTimer.Enabled = False
   CheckAppMessage
+  If Not IsProcessAlive(SharedMemory.Instances(0).mProcessID) Then ExitNow = True
   If ExitNow = True Then
     Unload Me
     Exit Sub
   End If
-  If doStartStress = True Then
-    doStartStress = False
-    RunStressTest
+  If HibernateTimer = False Then
+    If doStartStress = True Then
+      doStartStress = False
+      RunStress
+    End If
   End If
-  If DontEnableTimer = False Then If Not IdleTimer Is Nothing Then IdleTimer.Enabled = True
+  If ExitNow Then
+    Unload Me
+    Exit Sub
+  End If
+  If Not IdleTimer Is Nothing Then IdleTimer.Enabled = True
 End Sub

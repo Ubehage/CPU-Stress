@@ -4,10 +4,14 @@ Option Explicit
 Global Const MEMMSG_RUNSTRESS As Long = &H5
 Global Const MEMMSG_STOPSTRESS As Long = &H7
 Global Const MEMMSG_EXIT As Long = &H11
+Global Const MEMMSG_HIBERNATE As Long = &HB5
+Global Const MEMMSG_RESUME As Long = &HC9
 
 Global Const MEMSTATUS_IDLE As Long = &HA0
 Global Const MEMSTATUS_RUNNING As Long = &HA2
 Global Const MEMSTATUS_EXITING As Long = &HA4
+Global Const MEMSTATUS_HIBERNATING As Long = &HA7
+Global Const MEMSTATUS_FAILED As Long = &HA9
 
 Private Const PAGE_READWRITE As Long = &H4&
 Private Const FILE_MAP_ALL_ACCESS As Long = &HF001F
@@ -33,6 +37,7 @@ Private Declare Function CreateFileMapping Lib "kernel32" Alias "CreateFileMappi
 Private Declare Function OpenFileMapping Lib "kernel32" Alias "OpenFileMappingA" (ByVal dwDesiredAccess As Long, ByVal bInheritHandle As Long, ByVal lpName As String) As Long
 Private Declare Function MapViewOfFile Lib "kernel32" (ByVal hFileMappingObject As Long, ByVal dwDesiredAccess As Long, ByVal dwFileOffsetHigh As Long, ByVal dwFileOffsetLow As Long, ByVal dwNumberOfBytesToMap As Long) As Long
 Private Declare Function UnmapViewOfFile Lib "kernel32" (ByVal lpBaseAddress As Long) As Long
+Private Declare Function InterlockedExchange Lib "kernel32" (ByVal Target As Long, ByVal Value As Long) As Long
     
 Dim SharedMemHandle As Long
 Dim SharedMemBase As Long
@@ -104,7 +109,7 @@ Public Function ReadFromSharedMemory(Optional ReadAllData As Boolean = False, Op
 End Function
 
 Public Sub ClearSharedMemoryIndex(mOffset As Long)
-  If (mOffset < 0 Or mOffset > (TotalCores - 1)) Then Exit Sub
+  If (mOffset < 0 Or mOffset > TotalCores Or mOffset > UBound(SharedMemory.Instances)) Then Exit Sub
   With SharedMemory.Instances(mOffset)
     .mAssignedCore = 0
     .mCommand = 0
@@ -112,6 +117,32 @@ Public Sub ClearSharedMemoryIndex(mOffset As Long)
     .mStatus = 0
   End With
   Call WriteToSharedMemory(False, mOffset)
+End Sub
+
+' Commands and status have different owners. Write only the aligned DWORD
+' concerned, so a status acknowledgement cannot overwrite a newer Stop.
+Public Sub SendWorkerCommand(ByVal Index As Long, ByVal CommandValue As Long)
+  If SharedMemBase = 0 Or Index < 1 Or Index > UBound(SharedMemory.Instances) Then Exit Sub
+  Call InterlockedExchange(SharedMemBase + Index * SHAREDMEM_DATASIZE + 8, CommandValue)
+  SharedMemory.Instances(Index).mCommand = CommandValue
+End Sub
+
+Public Function TakeWorkerCommand() As Long
+  If SharedMemBase = 0 Or SharedMemOffset < 1 Or SharedMemOffset > UBound(SharedMemory.Instances) Then Exit Function
+  TakeWorkerCommand = InterlockedExchange(SharedMemBase + SharedMemOffset * SHAREDMEM_DATASIZE + 8, 0)
+  SharedMemory.Instances(SharedMemOffset).mCommand = 0
+End Function
+
+Public Sub PublishWorkerStatus(ByVal Status As Long)
+  If SharedMemBase = 0 Or SharedMemOffset < 1 Or SharedMemOffset > UBound(SharedMemory.Instances) Then Exit Sub
+  Call InterlockedExchange(SharedMemBase + SharedMemOffset * SHAREDMEM_DATASIZE + 12, Status)
+  SharedMemory.Instances(SharedMemOffset).mStatus = Status
+End Sub
+
+Public Sub PublishProcessID()
+  If SharedMemBase = 0 Or SharedMemOffset < 0 Or SharedMemOffset > UBound(SharedMemory.Instances) Then Exit Sub
+  SharedMemory.Instances(SharedMemOffset).mProcessID = GetMypId()
+  Call InterlockedExchange(SharedMemBase + SharedMemOffset * SHAREDMEM_DATASIZE, GetMypId())
 End Sub
 
 Private Sub ClearSharedMemory()

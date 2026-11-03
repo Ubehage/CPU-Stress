@@ -26,6 +26,7 @@ Attribute VB_Creatable = True
 Attribute VB_PredeclaredId = False
 Attribute VB_Exposed = False
 Option Explicit
+Implements IMouseSink
 
 Private Const PROPNAME_AUTOUPDATE As String = "AutoUpdate"
 Private Const PROPNAME_UPDATEINTERVAL As String = "UpdateInterval"
@@ -41,7 +42,8 @@ Private Const KERNEL_PIXEL_HEIGHT As Long = 40
 Private Const KERNEL_PIXEL_SPACING As Long = 7
 Private Const KERNEL_PIXEL_INDENT = 5
 
-Private Const PDH_FMT_DOUBLE As Long = &H200
+Private Const PROCESSOR_SAMPLE_BYTES As Long = 48
+Private Const MAX_SAMPLE_BYTES As Long = 65536
 
 Public Enum CPUView_Autosize
   NoAutoSize = &H0
@@ -49,17 +51,10 @@ Public Enum CPUView_Autosize
   ViewAutoSize = &H2
 End Enum
 
-Private Type PDH_FMT_COUNTERVALUE
-  CStatus As Long
-  Padding As Long
-  DoubleValue As Double
-End Type
-
-Private Declare Function PdhOpenQuery Lib "pdh.dll" Alias "PdhOpenQueryA" (ByVal dataSource As String, ByVal userData As Long, query As Long) As Long
-Private Declare Function PdhAddCounter Lib "pdh.dll" Alias "PdhAddEnglishCounterA" (ByVal query As Long, ByVal counterPath As String, ByVal userData As Long, ByRef Counter As Long) As Long
-Private Declare Function PdhCollectQueryData Lib "pdh.dll" (ByVal query As Long) As Long
-Private Declare Function PdhGetFormattedCounterValue Lib "pdh.dll" (ByVal Counter As Long, ByVal format As Long, lpdwType As Long, ByRef Value As PDH_FMT_COUNTERVALUE) As Long
-Private Declare Function PdhCloseQuery Lib "pdh.dll" (ByVal query As Long) As Long
+Private Declare Function CPUQueryGetModuleHandle Lib "kernel32" Alias "GetModuleHandleA" (ByVal ModuleName As String) As Long
+Private Declare Function CPUQueryGetProcAddress Lib "kernel32" Alias "GetProcAddress" (ByVal ModuleHandle As Long, ByVal ProcedureName As String) As Long
+Private Declare Function CPUQueryCall Lib "user32" Alias "CallWindowProcA" (ByVal ProcedureAddress As Long, ByVal InformationClass As Long, ByVal Buffer As Long, ByVal BufferLength As Long, ByVal ReturnLength As Long) As Long
+Private Declare Sub CPUQueryCopyMemory Lib "kernel32" Alias "RtlMoveMemory" (Destination As Any, Source As Any, ByVal Size As Long)
     
 Dim m_AutoUpdate As Boolean
 Dim m_UpdateInterval As Long
@@ -69,12 +64,13 @@ Dim cpuRECTs() As RECT
 Dim CPULoad() As Double
 Dim oldCPULoad() As Double
 Dim CPUBusy() As Boolean
+Dim CPUHibernating() As Boolean
 
 Dim ViewCols As Long
 Dim ViewRows As Long
 Dim ViewTop As Long
 
-Dim m_IsCapturing As Boolean
+Dim m_MouseToken As Long
 Dim m_IsHovering As Boolean
 Dim m_HoverIndex As Long
 Dim m_IsPressed As Boolean
@@ -86,10 +82,16 @@ Dim m_DisplayCPUName As String
 Dim FixedWindowSize As POINTAPI
 Dim LoadTextSize As Long
 
-Dim gQuery As Long
-Dim gCounters() As Long
 Dim gHasData As Boolean
-Dim gOpen As Boolean
+Dim m_QueryResolved As Boolean
+Dim m_QueryAddress As Long
+Dim m_SampleBuffer() As Byte
+Dim m_SampleCPUCount As Long
+Dim m_PreviousIdle() As Currency
+Dim m_PreviousKernel() As Currency
+Dim m_PreviousUser() As Currency
+Dim m_HaveBaseline As Boolean
+Dim m_LoadUnavailable As Boolean
 
 Dim WithEvents UpdateTimer As CPUTimer
 Attribute UpdateTimer.VB_VarHelpID = -1
@@ -108,6 +110,10 @@ End Property
 Public Property Get CPUIsBusy(Index As Long) As Boolean
   If (Index < 1 Or Index > TotalCores) Then Exit Property
   CPUIsBusy = CPUBusy(Index)
+End Property
+Public Property Get CPUIsHibernating(Index As Long) As Boolean
+  If (Index < 1 Or Index > TotalCores) Then Exit Property
+  CPUIsHibernating = CPUHibernating(Index)
 End Property
 Public Property Let AutoUpdate(New_AutoUpdate As Boolean)
   If m_AutoUpdate = New_AutoUpdate Then Exit Property
@@ -133,19 +139,29 @@ Public Property Let CPUIsBusy(Index As Long, New_Busy As Boolean)
   CPUBusy(Index) = New_Busy
   DrawCPURect Index
 End Property
+Public Property Let CPUIsHibernating(Index As Long, New_Hibernating As Boolean)
+  If (Index < 1 Or Index > TotalCores) Then Exit Property
+  If CPUHibernating(Index) = New_Hibernating Then Exit Property
+  CPUHibernating(Index) = New_Hibernating
+  DrawCPURect Index
+End Property
 
 Public Sub Refresh(Optional FullRefresh As Boolean = False)
   UserControl.Cls
   DrawBorderAndTitle
   DrawCPUName
-  DrawCPURects
+  If FullRefresh Then SetCPURECTs
+  DrawCPURects True
+  If FullRefresh And m_MouseToken <> 0 Then MouseRefresh m_MouseToken
 End Sub
 
 Public Sub UpdateView()
-  Dim i As Long
+  Dim i As Long, WasUnavailable As Boolean, HadData As Boolean
+  WasUnavailable = m_LoadUnavailable
+  HadData = gHasData
   GetCPULoads
   For i = 0 To (TotalCores - 1)
-    If CPULoad(i) <> oldCPULoad(i) Then
+    If CPULoad(i) <> oldCPULoad(i) Or WasUnavailable <> m_LoadUnavailable Or HadData <> gHasData Then
       DrawCPURect (i + 1), True
       oldCPULoad(i) = CPULoad(i)
     End If
@@ -216,7 +232,11 @@ End Sub
 Private Sub DrawCPULoadText(CPUIndex As Long)
   Dim t As String
   If LoadTextSize = 0 Then Exit Sub
-  t = CStr(Int(CPULoad(CPUIndex - 1)) & "%")
+  If m_LoadUnavailable Then
+    t = "N/A"
+  Else
+    t = CStr(Int(CPULoad(CPUIndex - 1)) & "%")
+  End If
   SetControlFont , True
   UserControl.ForeColor = COLOR_TEXT
   With cpuRECTs(CPUIndex)
@@ -237,7 +257,9 @@ Private Function GetCPUFloodHeight(CPUIndex As Long) As Long
 End Function
 
 Private Function GetCPUBorderColor(CPUIndex As Long) As Long
-  If CPUBusy(CPUIndex) = True Then
+  If CPUHibernating(CPUIndex) = True Then
+    GetCPUBorderColor = COLOR_YELLOW
+  ElseIf CPUBusy(CPUIndex) = True Then
     GetCPUBorderColor = COLOR_TEXT
   Else
     GetCPUBorderColor = COLOR_OUTLINE_LIGHT
@@ -310,24 +332,72 @@ Private Sub SetControlFont(Optional MainFont As Boolean = False, Optional Second
 End Sub
 
 Private Sub GetCPULoads()
-  Dim i As Long, v As PDH_FMT_COUNTERVALUE
-  If gOpen = False Then
-    ReDim gCounters(TotalCores - 1) As Long
-    Call PdhOpenQuery(vbNullString, 0, gQuery)
-    For i = 0 To (TotalCores - 1)
-      Call PdhAddCounter(gQuery, "\Processor(" & CStr(i) & ")\% Processor Time", 0, gCounters(i))
-    Next
-    gOpen = True
+  Dim i As Long, Offset As Long, Slots As Long, Returned As Long, Status As Long
+  Dim Idle As Currency, Kernel As Currency, User As Currency
+  Dim IdleDelta As Double, TotalDelta As Double, UsagePercent As Double
+  On Error GoTo Unavailable
+  ' One OS snapshot replaces PDH's expensive first-use counter setup on the
+  ' UI thread. Resolve dynamically because this native API can be unavailable.
+  If Not m_QueryResolved Then
+    m_QueryResolved = True
+    m_QueryAddress = CPUQueryGetProcAddress(CPUQueryGetModuleHandle("ntdll.dll"), "NtQuerySystemInformation")
   End If
-  Call PdhCollectQueryData(gQuery)
-  If gHasData = False Then
-    gHasData = True
-  Else
-    For i = LBound(gCounters) To UBound(gCounters)
-      Call PdhGetFormattedCounterValue(gCounters(i), PDH_FMT_DOUBLE, 0, v)
-      If v.CStatus = 0 Then CPULoad(i) = CSng(v.DoubleValue)
-    Next
+  If m_QueryAddress = 0 Then GoTo Unavailable
+  If TotalCores < 1 Or TotalCores > MAX_SAMPLE_BYTES \ PROCESSOR_SAMPLE_BYTES Then GoTo Unavailable
+  If m_SampleCPUCount <> TotalCores Then
+    Slots = TotalCores
+    If Slots < 64 Then Slots = 64
+    ReDim m_SampleBuffer(0 To Slots * PROCESSOR_SAMPLE_BYTES - 1)
+    ReDim m_PreviousIdle(0 To TotalCores - 1)
+    ReDim m_PreviousKernel(0 To TotalCores - 1)
+    ReDim m_PreviousUser(0 To TotalCores - 1)
+    m_SampleCPUCount = TotalCores
+    m_HaveBaseline = False
   End If
+  ' Class 8: SYSTEM_PROCESSOR_PERFORMANCE_INFORMATION, 48-byte stride.
+  ' This four-argument stdcall OS function matches CallWindowProc's ABI.
+  Status = CPUQueryCall(m_QueryAddress, 8, VarPtr(m_SampleBuffer(0)), UBound(m_SampleBuffer) + 1, VarPtr(Returned))
+  If Status = &HC0000004 Or Status = &HC0000023 Then
+    ' At most one bounded resize/retry if Windows reports more processors.
+    If Returned <= UBound(m_SampleBuffer) + 1 Or Returned > MAX_SAMPLE_BYTES Then GoTo Unavailable
+    ReDim m_SampleBuffer(0 To Returned - 1)
+    Returned = 0
+    Status = CPUQueryCall(m_QueryAddress, 8, VarPtr(m_SampleBuffer(0)), UBound(m_SampleBuffer) + 1, VarPtr(Returned))
+  End If
+  If Status < 0 Then GoTo Unavailable
+  If Returned < TotalCores * PROCESSOR_SAMPLE_BYTES Or Returned > UBound(m_SampleBuffer) + 1 Then GoTo Unavailable
+  If Returned Mod PROCESSOR_SAMPLE_BYTES <> 0 Then GoTo Unavailable
+  For i = 0 To TotalCores - 1
+    Offset = i * PROCESSOR_SAMPLE_BYTES
+    CPUQueryCopyMemory Idle, m_SampleBuffer(Offset), 8
+    CPUQueryCopyMemory Kernel, m_SampleBuffer(Offset + 8), 8
+    CPUQueryCopyMemory User, m_SampleBuffer(Offset + 16), 8
+    If m_HaveBaseline Then
+      ' Currency preserves the 64-bit counters; its scale cancels in the ratio.
+      ' Kernel time includes idle time, so total = kernel + user.
+      IdleDelta = CDbl(Idle) - CDbl(m_PreviousIdle(i))
+      TotalDelta = (CDbl(Kernel) - CDbl(m_PreviousKernel(i))) + (CDbl(User) - CDbl(m_PreviousUser(i)))
+      If IdleDelta < 0 Or TotalDelta < 0 Then GoTo Unavailable
+      UsagePercent = 0
+      If TotalDelta > 0 Then UsagePercent = (1# - IdleDelta / TotalDelta) * 100#
+      If UsagePercent < 0 Then UsagePercent = 0
+      If UsagePercent > 100 Then UsagePercent = 100
+      CPULoad(i) = UsagePercent
+    End If
+    m_PreviousIdle(i) = Idle
+    m_PreviousKernel(i) = Kernel
+    m_PreviousUser(i) = User
+  Next i
+  gHasData = m_HaveBaseline
+  m_HaveBaseline = True
+  m_LoadUnavailable = False
+  Exit Sub
+Unavailable:
+  ' Never keep stale percentages after a failed/incompatible snapshot.
+  gHasData = False
+  m_HaveBaseline = False
+  m_LoadUnavailable = True
+  ClearCPULoads
 End Sub
 
 Private Sub ClearCPULoads()
@@ -437,6 +507,7 @@ Private Sub GetCPUInfo()
   ReDim CPULoad(TotalCores - 1) As Double
   ReDim oldCPULoad(TotalCores - 1) As Double
   ReDim CPUBusy(1 To TotalCores) As Boolean
+  ReDim CPUHibernating(1 To TotalCores) As Boolean
   cCap = GetCPUCapabilities()
   m_DisplayCPUName = CPUInfo.Name & " (" & GetCPUTechString(cCap) & ")"
 End Sub
@@ -480,13 +551,14 @@ Private Sub DoAutoSize()
   If m_AutoSize = FixedSize Then
     SetFixedWindowSize
     UserControl_Resize
-  ElseIf m_AutoSize = ViewAutoSize Then
+  Else
     Refresh True
   End If
 End Sub
 
 Private Sub ShiftAutoUpdate()
   gHasData = False
+  m_HaveBaseline = False
   ClearCPULoads
   If m_AutoUpdate = True Then
     StartUpdateTimer
@@ -508,70 +580,91 @@ Private Sub KillUpdateTimer()
   Set UpdateTimer = Nothing
 End Sub
 
-Private Function GetCPUIndexFromMousePos() As Long
-  Dim i As Long, p As POINTAPI, r As Long
-  Call GetCursorPos(p)
-  Call ScreenToClient(UserControl.hWnd, p)
-  p.X = (p.X * Screen.TwipsPerPixelX)
-  p.Y = (p.Y * Screen.TwipsPerPixelY)
+Private Function CPUIndexAt(ByVal X As Single, ByVal Y As Single) As Long
+  Dim i As Long
   For i = 1 To TotalCores
     With cpuRECTs(i)
-      If (p.X >= .Left And p.X <= .Right) Then
-        If (p.Y >= .Top And p.Y <= .Bottom) Then
-          r = i
-          Exit For
+      If (X >= .Left And X < .Right) Then
+        If (Y >= .Top And Y < .Bottom) Then
+          CPUIndexAt = i
+          Exit Function
         End If
       End If
     End With
   Next
-  GetCPUIndexFromMousePos = r
 End Function
 
-Private Sub StartHover(Optional DoNotRefresh As Boolean = False, Optional ForceRefresh As Boolean = False)
-  Dim hIndex As Long, t As Long, r As Boolean
-  hIndex = GetCPUIndexFromMousePos()
-  If hIndex <> m_HoverIndex Then
-    t = m_HoverIndex
-    m_HoverIndex = hIndex
-    If DoNotRefresh = False Then r = True
-  End If
-  If ForceRefresh = True Then r = True
-  m_IsHovering = True
-  If r = True Then
-    DrawCPURect t, True
-    DrawCPURect m_HoverIndex, True
-  End If
-  If m_IsCapturing = True Then Exit Sub
-  Call SetCapture(UserControl.hWnd)
-  m_IsCapturing = True
+Private Function IMouseSink_HitTest(ByVal Token As Long, ByVal X As Long, ByVal Y As Long) As Long
+  If UserControl.Enabled Then IMouseSink_HitTest = CPUIndexAt(CSng(X) * Screen.TwipsPerPixelX, CSng(Y) * Screen.TwipsPerPixelY)
+End Function
+
+Private Sub IMouseSink_OnMouse(ByVal Token As Long, ByVal Kind As MouseEventKind, _
+    ByVal Region As Long, ByVal Button As Integer, ByVal Buttons As Integer, _
+    ByVal Shift As Integer, ByVal X As Long, ByVal Y As Long, ByVal Reason As MouseCancelReason)
+  Dim OldHover As Long, OldPress As Long
+  If Token <> m_MouseToken Then Exit Sub
+  Select Case Kind
+    Case meEnter
+      m_IsHovering = True
+      m_HoverIndex = Region
+      DrawCPURect Region, True
+    Case meLeave
+      m_IsHovering = False
+      m_HoverIndex = 0
+      DrawCPURect Region, True
+    Case meDown
+      If Button <> vbLeftButton Or Region < 1 Or Region > TotalCores Then Exit Sub
+      m_MouseIsDown = True
+      m_IsPressed = True
+      m_PressedIndex = Region
+      DrawCPURect Region, True
+    Case meUp
+      If Button <> vbLeftButton Then Exit Sub
+      OldPress = m_PressedIndex
+      m_MouseIsDown = False
+      m_IsPressed = False
+      m_PressedIndex = 0
+      DrawCPURect OldPress, True
+    Case meCancel
+      OldHover = m_HoverIndex
+      OldPress = m_PressedIndex
+      ClearMouseState
+      DrawCPURect OldHover, True
+      If OldPress <> OldHover Then DrawCPURect OldPress, True
+    Case meClick
+      If Region >= 1 And Region <= TotalCores Then RaiseEvent Click(Region)
+      ' A recipient may hide or unload this control; do not touch it afterward.
+  End Select
 End Sub
 
-Private Sub EndHover(Optional DoNotRefresh As Boolean = False, Optional ForceRefresh As Boolean = False)
-  Dim r As Boolean
-  If m_IsHovering = True Then
-    m_IsHovering = False
-    If DoNotRefresh = False Then r = True
-  End If
-  If (r = True Or ForceRefresh = True) Then DrawCPURect m_HoverIndex
-  If (m_IsCapturing = False Or m_MouseIsDown = True) Then Exit Sub
-  EndCapture
+Private Sub ClearMouseState()
+  m_IsHovering = False
+  m_HoverIndex = 0
+  m_MouseIsDown = False
+  m_IsPressed = False
+  m_PressedIndex = 0
 End Sub
 
-Private Sub EndCapture()
-  If m_IsCapturing = True Then
-    Call ReleaseCapture
-    m_IsCapturing = False
-  End If
+Private Sub DetachMouse()
+  Dim Token As Long
+  Token = m_MouseToken
+  m_MouseToken = 0
+  MouseUnregister Token
+  ClearMouseState
 End Sub
 
 Private Sub UpdateTimer_Timer()
   UpdateTimer.Enabled = False
   UpdateView
-  If m_AutoUpdate = True Then UpdateTimer.Enabled = True
+  If m_AutoUpdate = True Then
+    If Not UpdateTimer Is Nothing Then UpdateTimer.Enabled = True
+  End If
 End Sub
 
 Private Sub UserControl_Initialize()
   InitCPUInfo
+  ' Measure the headings before laying out and sizing the CPU regions.
+  Refresh True
   SetFixedWindowSize
   ShiftAutoUpdate
 End Sub
@@ -583,35 +676,44 @@ Private Sub UserControl_InitProperties()
 End Sub
 
 Private Sub UserControl_MouseDown(Button As Integer, Shift As Integer, X As Single, Y As Single)
+  ' The IDE uses ordinary VB6 input; compiled input comes from IMouseSink.
+  If MouseNativeAvailable() Or Not UserControl.Enabled Then Exit Sub
   If Button = vbLeftButton Then
-    If IsCursorOnWindow(UserControl.hWnd) Then
+    m_PressedIndex = CPUIndexAt(X, Y)
+    If m_PressedIndex > 0 Then
       m_MouseIsDown = True
       m_IsPressed = True
-      m_PressedIndex = GetCPUIndexFromMousePos()
-      StartHover , True
+      DrawCPURect m_PressedIndex, True
     End If
   End If
-End Sub
-
-Private Sub UserControl_MouseMove(Button As Integer, Shift As Integer, X As Single, Y As Single)
-  StartHover
-  If m_IsCapturing = False Then Exit Sub
-  If IsCursorOnWindow(UserControl.hWnd, m_MouseIsDown) = False Then EndHover
 End Sub
 
 Private Sub UserControl_MouseUp(Button As Integer, Shift As Integer, X As Single, Y As Single)
-  Dim HadCapture As Boolean
+  Dim OldPress As Long
+  If MouseNativeAvailable() Or Not UserControl.Enabled Then Exit Sub
   If (Button = vbLeftButton And m_MouseIsDown = True) Then
-    HadCapture = m_IsCapturing
-    m_MouseIsDown = False
-    m_IsPressed = False
-    DrawCPURect m_PressedIndex, True
-    EndHover True
-    If GetCPUIndexFromMousePos = m_PressedIndex Then
-      RaiseEvent Click(m_PressedIndex)
-      If HadCapture = True Then StartHover True
+    OldPress = m_PressedIndex
+    ClearMouseState
+    DrawCPURect OldPress, True
+    If OldPress > 0 And OldPress = CPUIndexAt(X, Y) Then
+      If X >= 0 And Y >= 0 And X < UserControl.ScaleWidth And Y < UserControl.ScaleHeight Then RaiseEvent Click(OldPress)
     End If
   End If
+End Sub
+
+Private Sub UserControl_Show()
+  Refresh True
+  If UserControl.Ambient.UserMode And MouseNativeAvailable() Then
+    If m_MouseToken = 0 Then
+      m_MouseToken = MouseRegister(UserControl.hWnd, Me)
+      If m_MouseToken = 0 Then Err.Raise vbObjectError + 2102, "CPUView", MouseLastError()
+    End If
+    MouseRefresh m_MouseToken
+  End If
+End Sub
+
+Private Sub UserControl_Hide()
+  DetachMouse
 End Sub
 
 Private Sub UserControl_ReadProperties(PropBag As PropertyBag)
@@ -632,11 +734,8 @@ Private Sub UserControl_Resize()
 End Sub
 
 Private Sub UserControl_Terminate()
+  DetachMouse
   KillUpdateTimer
-  If gOpen = True Then
-    Call PdhCloseQuery(gQuery)
-    gOpen = False
-  End If
 End Sub
 
 Private Sub UserControl_WriteProperties(PropBag As PropertyBag)

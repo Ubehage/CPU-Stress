@@ -213,7 +213,7 @@ End Function
 Public Sub SetProcessPriority(pPriority As PRIORITY_CONSTANTS)
   Dim hProc As Long
   hProc = GetCurrentProcess()
-  Call SetPriorityClass(hProc, pPriority)
+  If SetPriorityClass(hProc, pPriority) = 0 Then Err.Raise vbObjectError + 2400, "SetProcessPriority", "Cannot set process scheduling priority."
 End Sub
 
 Public Sub DoEvents2(Optional hWnd As Long = 0&)

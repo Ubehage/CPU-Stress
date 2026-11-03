@@ -170,6 +170,8 @@ Dim o_UpdateInterval As Long
 
 Dim LastGoodTextVal As Long
 
+Dim IsHibernated As Boolean
+
 Dim WithEvents StatusTimer As CPUTimer
 Attribute StatusTimer.VB_VarHelpID = -1
 
@@ -185,9 +187,12 @@ Friend Sub HibernationTrigger(IsHibernating As Boolean)
   If IsHibernating = True Then
     AutoRefreshView = CPUView1.AutoUpdate
     CPUView1.AutoUpdate = False
+    HibernateAllStressers
   Else
     CPUView1.AutoUpdate = AutoRefreshView
+    ResumeAllStressers
   End If
+  IsHibernated = IsHibernating
 End Sub
 
 Private Sub MoveObjects()
@@ -273,29 +278,43 @@ Private Sub KillStatusTimer()
 End Sub
 
 Private Sub CheckActiveProcesses()
-  Dim i As Long, p As Long
+  Dim i As Long, p As Long, Failed As Long
   Call ReadFromSharedMemory(True)
   For i = 1 To TotalCores
     With SharedMemory.Instances(i)
       Select Case .mProcessID
         Case 0, -1
           CPUView1.CPUIsBusy(i) = False
+          CPUView1.CPUIsHibernating(i) = False
         Case Else
           If IsProcessAlive(.mProcessID) = False Then
             ClearSharedMemoryIndex i
             CPUView1.CPUIsBusy(i) = False
+            CPUView1.CPUIsHibernating(i) = False
           Else
             If .mStatus = MEMSTATUS_RUNNING Then
               p = (p + 1)
               CPUView1.CPUIsBusy(i) = True
+              CPUView1.CPUIsHibernating(i) = False
+            ElseIf .mStatus = MEMSTATUS_HIBERNATING Then
+              If IsHibernated = True Then
+                p = (p + 1)
+                CPUView1.CPUIsHibernating(i) = True
+              Else
+                .mCommand = MEMMSG_RESUME
+                SendWorkerCommand i, .mCommand
+              End If
             Else
+              If .mStatus = MEMSTATUS_FAILED Then Failed = Failed + 1
               CPUView1.CPUIsBusy(i) = False
+              CPUView1.CPUIsHibernating(i) = False
             End If
           End If
       End Select
     End With
   Next
   Status1.Text = Replace$(STATUS_TEXT, "%p%", CStr(p))
+  If Failed > 0 Then Status1.Text = Status1.Text & " " & CStr(Failed) & " worker(s) failed to start."
   cmdStopAll.Enabled = Not (p = 0)
   cmdStartAll.Enabled = (p < TotalCores)
 End Sub
@@ -311,10 +330,15 @@ Private Sub StartAllStressers()
         LaunchNewStresser i
       Else
         If IsProcessAlive(.mProcessID) = True Then
-          If .mStatus = MEMSTATUS_IDLE Then
-            .mCommand = MEMMSG_RUNSTRESS
-            Call WriteToSharedMemory(False, i)
-          End If
+          Select Case .mStatus
+            Case MEMSTATUS_IDLE, MEMSTATUS_FAILED
+              .mCommand = MEMMSG_RUNSTRESS
+            Case MEMSTATUS_HIBERNATING
+              .mCommand = MEMMSG_RESUME
+            Case Else
+              .mCommand = &H0
+          End Select
+          If .mCommand <> &H0 Then SendWorkerCommand i, .mCommand
         Else
           ClearSharedMemoryIndex i
           LaunchNewStresser i
@@ -325,13 +349,34 @@ Private Sub StartAllStressers()
 End Sub
 
 Private Sub CloseAllStressers(Optional StopOnly As Boolean = False)
-  Dim i As Long
+  If StopOnly Then
+    ' Include newly launched workers whose initial RUN is still pending.
+    DispatchCommandToWorkers MEMMSG_STOPSTRESS
+  Else
+    DispatchCommandToWorkers MEMMSG_EXIT
+  End If
+End Sub
+
+Private Sub HibernateAllStressers()
+  DispatchCommandToWorkers MEMMSG_HIBERNATE, MEMSTATUS_RUNNING
+End Sub
+
+Private Sub ResumeAllStressers()
+  DispatchCommandToWorkers MEMMSG_RESUME, MEMSTATUS_HIBERNATING
+End Sub
+
+Private Sub DispatchCommandToWorkers(NewCommand As Long, Optional CheckStatus As Long = &H0)
+  Dim i As Long, SetMsg As Boolean
   Call ReadFromSharedMemory(True)
   For i = 1 To TotalCores
+    SetMsg = False
     With SharedMemory.Instances(i)
       If .mProcessID <> 0 Then
-        If StopOnly = True Then .mCommand = MEMMSG_STOPSTRESS Else .mCommand = MEMMSG_EXIT
-        Call WriteToSharedMemory(False, i)
+        If CheckStatus = &H0 Then SetMsg = True Else If .mStatus = CheckStatus Then SetMsg = True
+      End If
+      If SetMsg = True Then
+        .mCommand = NewCommand
+        SendWorkerCommand i, NewCommand
       End If
     End With
   Next
@@ -364,6 +409,7 @@ Private Sub cmdStopAll_Click()
 End Sub
 
 Private Sub CPUView1_Click(Index As Long)
+  If Index < 1 Or Index > TotalCores Then Exit Sub
   Call ReadFromSharedMemory(False, Index)
   With SharedMemory.Instances(Index)
     If .mProcessID = 0 Then
@@ -376,10 +422,10 @@ Private Sub CPUView1_Click(Index As Long)
         Else
           If .mStatus = MEMSTATUS_RUNNING Then
             .mCommand = MEMMSG_STOPSTRESS
-          ElseIf .mStatus = MEMSTATUS_IDLE Then
+          ElseIf .mStatus = MEMSTATUS_IDLE Or .mStatus = MEMSTATUS_FAILED Then
             .mCommand = MEMMSG_RUNSTRESS
           End If
-          Call WriteToSharedMemory(False, Index)
+          SendWorkerCommand Index, .mCommand
         End If
       End If
     End If
@@ -388,9 +434,19 @@ End Sub
 
 Private Sub Form_Resize()
   MoveObjects
+  MouseRefreshAll
+End Sub
+
+Private Sub Form_Activate()
+  MouseRefreshAll
+End Sub
+
+Private Sub Form_Deactivate()
+  MouseCancelAll mcDeactivated
 End Sub
 
 Private Sub Form_Unload(Cancel As Integer)
+  MouseShutdown
   KillStatusTimer
   CloseAllStressers
   ClearSharedMemoryIndex SharedMemOffset
@@ -402,7 +458,8 @@ Private Sub StatusTimer_Timer()
   StatusTimer.Enabled = False
   If ExitNow Then Unload Me: Exit Sub
   CheckActiveProcesses
-  StatusTimer.Enabled = True
+  Call DoEvents2(Me.hWnd)
+  If Not StatusTimer Is Nothing Then StatusTimer.Enabled = True
 End Sub
 
 Private Sub txtInterval_Change()

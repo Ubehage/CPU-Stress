@@ -71,20 +71,23 @@ Global ExitNow As Boolean
 Global IsRunningInIDE As Boolean
 
 Sub Main()
+  Dim StartMode As Start_Code
   IsRunningInIDE = IsInIDE()
   Call InitCommonControls
-  Select Case Start()
+  StartMode = Start()
+  If StartMode = scNone Then Exit Sub
+  PublishProcessID
+  Select Case StartMode
     Case Start_Code.scMainWindow
+      If Not IsRunningInIDE Then SetProcessPriority pcAboveNormal
       LoadMainForm
     Case Start_Code.scStressWorker
+      SetProcessPriority pcNormal
       FillCPUInfo
       LoadStressForm
     Case Else
       Exit Sub
   End Select
-  SharedMemory.Instances(SharedMemOffset).mProcessID = GetMypId
-  Call WriteToSharedMemory(False)
-  'SetProcessPriority pcAboveNormal
 End Sub
 
 Private Function Start() As Start_Code
@@ -94,7 +97,7 @@ Private Function Start() As Start_Code
   End If
   Call ReadCommandLine(Command)
   If DoRun = True Then
-    If SharedMemOffset = 0 Then
+    If SharedMemOffset < 1 Or SharedMemOffset > UBound(SharedMemory.Instances) Then
       MsgBox "Invalid command parameters!" & vbCrLf & "This program will now exit.", vbOKOnly Or vbInformation, "Invalid command parameters"
       UnloadAll
       Exit Function
@@ -123,21 +126,24 @@ End Sub
 Private Sub LoadStressForm()
   Load frmStress
   frmStress.Start
-  If IsRunningInIDE = False Then HookWindowProc frmStress.hWnd, True
+  'If IsRunningInIDE = False Then HookWindowProc frmStress.hWnd, True
 End Sub
 
 Public Sub UnloadAll()
+  StressShutdown
+  StressWorkersShutdown
+  MouseShutdown
   Call CloseSharedMemory
   UnhookWindowProc
 End Sub
 
 Public Function IsInIDE() As Boolean
-  Dim inIDE As Boolean
-  inIDE = False
+  Dim InIDE As Boolean
+  InIDE = False
   On Error Resume Next
-  Debug.Assert MakeIDECheck(inIDE)
+  Debug.Assert MakeIDECheck(InIDE)
   On Error GoTo 0
-  IsInIDE = inIDE
+  IsInIDE = InIDE
 End Function
 
 Private Function MakeIDECheck(bSet As Boolean) As Boolean
@@ -193,7 +199,7 @@ Public Sub LaunchNewStresser(Optional Index As Long = 0)
   End With
   Call WriteToSharedMemory(False, i)
   On Error GoTo ShellError
-  Shell cL, vbNormal
+  LaunchOwnedStressWorker GetAppFile(), cL, i
 ExitLaunch:
   On Error GoTo 0
   Exit Sub

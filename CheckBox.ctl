@@ -24,6 +24,7 @@ Attribute VB_Creatable = True
 Attribute VB_PredeclaredId = False
 Attribute VB_Exposed = False
 Option Explicit
+Implements IMouseSink
 
 Private Const PROPNAME_VALUE As String = "Value"
 Private Const PROPNAME_CAPTION As String = "Caption"
@@ -33,15 +34,10 @@ Dim m_Value As CheckBoxConstants
 Dim m_Caption As String
 Dim m_Enabled As Boolean
 
-Dim m_IsHovering As Boolean
-
-Dim m_ScreenRect As RECT
-Dim m_IsCapturing As Boolean
+Dim m_MouseToken As Long
 Dim m_Hovering As Boolean
 Dim m_IsPressed As Boolean
 Dim m_MouseIsDown As Boolean
-Dim m_KeyIsDown As Boolean
-Dim m_HasFocus As Boolean
 
 Dim BoxRect As RECT
 Dim TextRect As RECT
@@ -75,13 +71,12 @@ Public Property Let Enabled(New_Enabled As Boolean)
   m_Enabled = New_Enabled
   UserControl.PropertyChanged PROPNAME_ENABLED
   If m_Enabled = False Then
-    EndHover , True
     m_MouseIsDown = False
-    m_KeyIsDown = False
     m_IsPressed = False
-  Else
-    Refresh
+    m_Hovering = False
   End If
+  If m_MouseToken <> 0 Then MouseSetEnabled m_MouseToken, m_Enabled
+  Refresh
 End Property
 
 Public Sub Refresh(Optional FullRedraw As Boolean = False)
@@ -126,7 +121,7 @@ End Sub
 Private Function GetTextColor() As Long
   If m_Enabled = False Then
     GetTextColor = COLOR_TEXT_DISABLED
-  ElseIf m_Hovering Then
+  ElseIf m_Hovering Or m_MouseIsDown Then
     GetTextColor = COLOR_TEXT_HOVER
   Else
     GetTextColor = COLOR_TEXT
@@ -160,7 +155,7 @@ End Function
 Private Function GetBoxBorderColor() As Long
   If m_Enabled = False Then
     GetBoxBorderColor = COLOR_TEXT_DISABLED
-  ElseIf m_Hovering Then
+  ElseIf m_Hovering Or m_MouseIsDown Then
     GetBoxBorderColor = COLOR_OUTLINE_LIGHT
   Else
     GetBoxBorderColor = COLOR_OUTLINE
@@ -192,65 +187,49 @@ Private Function CheckWindowSize() As Boolean
   CheckWindowSize = True
 End Function
 
-Private Sub SetScreenRect()
-  Dim r As RECT, p As POINTAPI
-  Call GetClientRect(UserControl.hWnd, r)
-  p.X = r.Left
-  p.Y = r.Top
-  Call ClientToScreen(UserControl.hWnd, p)
-  With m_ScreenRect
-    .Left = p.X
-    .Top = p.Y
-    .Right = (.Left + r.Right)
-    .Bottom = (.Top + r.Bottom)
-  End With
-End Sub
-
-Private Sub StartHover(Optional DoNotRefresh As Boolean = False, Optional ForceRefresh As Boolean = False)
-  Dim r As Boolean
-  If m_Hovering = False Then
-    m_Hovering = True
-    If DoNotRefresh = False Then r = True
-  End If
-  If (r = True Or ForceRefresh = True) Then
-    SetScreenRect
-    Refresh
-  End If
-  If m_IsCapturing = True Then Exit Sub
-  Call SetCapture(UserControl.hWnd)
-  m_IsCapturing = True
-End Sub
-
-Private Sub EndHover(Optional DoNotRefresh As Boolean = False, Optional ForceRefresh As Boolean = False)
-  Dim r As Boolean
-  If m_Hovering = True Then
-    m_Hovering = False
-    If DoNotRefresh = False Then r = True
-  End If
-  If (r = True Or ForceRefresh = True) Then Refresh
-  If m_IsCapturing = False Or m_MouseIsDown = True Then Exit Sub
-  EndCapture
-End Sub
-
-Private Sub EndCapture()
-  If m_IsCapturing Then
-    Call ReleaseCapture
-    m_IsCapturing = False
-  End If
-End Sub
-
-Private Function IsCursorOnButton() As Boolean
-  Dim p As POINTAPI, hTop As Long
-  Call GetCursorPos(p)
-  If IsPointInRect(m_ScreenRect, p) = False Then If m_MouseIsDown = False Then Exit Function
-  hTop = WindowFromPoint(p.X, p.Y)
-  If hTop <> UserControl.hWnd Then If m_MouseIsDown = False Then Exit Function
-  IsCursorOnButton = True
+Private Function IMouseSink_HitTest(ByVal Token As Long, ByVal X As Long, ByVal Y As Long) As Long
+  If m_Enabled Then IMouseSink_HitTest = 1
 End Function
 
-Private Function CanInteractNow() As Boolean
-  CanInteractNow = UserControl.Ambient.UserMode And m_Enabled And UserControl.Extender.Visible And UserControl.hWnd <> 0
-End Function
+Private Sub IMouseSink_OnMouse(ByVal Token As Long, ByVal Kind As MouseEventKind, _
+    ByVal Region As Long, ByVal Button As Integer, ByVal Buttons As Integer, _
+    ByVal Shift As Integer, ByVal X As Long, ByVal Y As Long, ByVal Reason As MouseCancelReason)
+  If Token <> m_MouseToken Then Exit Sub
+  Select Case Kind
+    Case meEnter
+      m_Hovering = True
+    Case meLeave
+      m_Hovering = False
+    Case meDown
+      If Button <> vbLeftButton Then Exit Sub
+      m_MouseIsDown = True
+      m_IsPressed = True
+    Case meUp
+      If Button <> vbLeftButton Then Exit Sub
+      m_MouseIsDown = False
+      m_IsPressed = False
+    Case meCancel
+      m_MouseIsDown = False
+      m_IsPressed = False
+      m_Hovering = False
+    Case meClick
+      If m_Enabled Then DoTheClick
+      Exit Sub ' A Click handler may hide or unload the control.
+    Case Else
+      Exit Sub
+  End Select
+  Refresh
+End Sub
+
+Private Sub DetachMouse()
+  Dim Token As Long
+  Token = m_MouseToken
+  m_MouseToken = 0
+  MouseUnregister Token
+  m_Hovering = False
+  m_MouseIsDown = False
+  m_IsPressed = False
+End Sub
 
 Private Sub DoTheClick()
   ChangedByCode = True
@@ -270,34 +249,24 @@ Private Sub UserControl_InitProperties()
 End Sub
 
 Private Sub UserControl_MouseDown(Button As Integer, Shift As Integer, X As Single, Y As Single)
+  ' Conventional VB6 input in the IDE; compiled input uses IMouseSink only.
+  If MouseNativeAvailable() Then Exit Sub
   If m_Enabled = False Then Exit Sub
   If (Button = vbLeftButton And m_MouseIsDown = False) Then
     m_MouseIsDown = True
     m_IsPressed = True
-    StartHover , True
+    Refresh
   End If
 End Sub
 
-Private Sub UserControl_MouseMove(Button As Integer, Shift As Integer, X As Single, Y As Single)
-  If m_Enabled = False Then Exit Sub
-  StartHover
-  If m_IsCapturing = False Then Exit Sub
-  If IsCursorOnButton() = False Then EndHover
-End Sub
-
 Private Sub UserControl_MouseUp(Button As Integer, Shift As Integer, X As Single, Y As Single)
+  If MouseNativeAvailable() Then Exit Sub
   If m_Enabled = False Then Exit Sub
-  Dim HadCapture As Boolean
   If (Button = vbLeftButton And m_MouseIsDown = True) Then
-    HadCapture = m_IsCapturing
     m_MouseIsDown = False
     m_IsPressed = False
-    EndHover True
-    If IsCursorOnButton() = True Then
-      DoTheClick
-      If (CanInteractNow() And HadCapture = True) Then StartHover True
-    End If
     Refresh
+    If X >= 0 And Y >= 0 And X < UserControl.ScaleWidth And Y < UserControl.ScaleHeight Then DoTheClick
   End If
 End Sub
 
@@ -309,10 +278,27 @@ End Sub
 
 Private Sub UserControl_Resize()
   If CheckWindowSize = True Then Refresh
+  If m_MouseToken <> 0 Then MouseRefresh m_MouseToken
 End Sub
 
 Private Sub UserControl_Show()
+  If UserControl.Ambient.UserMode And MouseNativeAvailable() Then
+    If m_MouseToken = 0 Then
+      m_MouseToken = MouseRegister(UserControl.hWnd, Me)
+      If m_MouseToken = 0 Then Err.Raise vbObjectError + 2101, "CheckBox", MouseLastError()
+      MouseSetEnabled m_MouseToken, m_Enabled
+    End If
+    MouseRefresh m_MouseToken
+  End If
   Refresh
+End Sub
+
+Private Sub UserControl_Hide()
+  DetachMouse
+End Sub
+
+Private Sub UserControl_Terminate()
+  DetachMouse
 End Sub
 
 Private Sub UserControl_WriteProperties(PropBag As PropertyBag)

@@ -3,6 +3,7 @@ Option Explicit
 
 Private Const GWL_WNDPROC = -4
 Private Const WM_POWERBROADCAST = &H218 'Power state is changing
+Private Const WM_WINDOWPOSCHANGED As Long = &H47
 
 Private Const PBT_APMSUSPEND As Long = &H4 'Windows is hibernating
 Private Const PBT_APMRESUMEAUTOMATIC = &H12 'Windows has resumed from suspended state.
@@ -29,6 +30,8 @@ Public Sub UnhookWindowProc()
 End Sub
 
 Public Function WndProc(ByVal hWnd As Long, ByVal uMsg As Long, ByVal wParam As Long, ByVal lParam As Long) As Long
+  Dim PreviousProc As Long
+  PreviousProc = OldWndProc
   If uMsg = WM_POWERBROADCAST Then
     Dim hVal As Boolean, DoCall As Boolean
     If wParam = PBT_APMSUSPEND Then
@@ -38,7 +41,10 @@ Public Function WndProc(ByVal hWnd As Long, ByVal uMsg As Long, ByVal wParam As 
       hVal = False
       DoCall = True
     End If
-    If DoCall = True Then If IsWorker Then Call frmStress.HibernationTrigger(hVal) Else Call frmMain.HibernationTrigger(hVal)
+    If DoCall = True Then If IsWorker = False Then Call frmMain.HibernationTrigger(hVal)
   End If
-  WndProc = CallWindowProc(OldWndProc, hWnd, uMsg, wParam, lParam)
+  WndProc = CallWindowProc(PreviousProc, hWnd, uMsg, wParam, lParam)
+  ' Child windows do not receive their parent's move message. Reevaluate
+  ' pointer geometry after default layout processing, using our existing hook.
+  If uMsg = WM_WINDOWPOSCHANGED And IsWorker = False Then MouseRefreshAll
 End Function
